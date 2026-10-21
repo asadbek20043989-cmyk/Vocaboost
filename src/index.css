@@ -1,0 +1,174 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: #0B0F17;
+    color: #F8FAFC;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #0B0F17;
+}
+::-webkit-scrollbar-thumb {
+  background: #1E293B;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Telegram safe-area padding helper */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 12px);
+}
+
+/* Lucky wheel effects */
+@keyframes lw-fall {
+  0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(110vh) rotate(720deg); opacity: 0.9; }
+}
+.lw-confetti {
+  position: absolute;
+  top: -20px;
+  border-radius: 2px;
+  animation-name: lw-fall;
+  animation-timing-function: cubic-bezier(0.3, 0.6, 0.5, 1);
+  animation-fill-mode: forwards;
+}
+@keyframes lw-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  60% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.lw-pop { animation: lw-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+@keyframes lw-bounce {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  25% { transform: scale(1.2) rotate(-8deg); }
+  75% { transform: scale(1.2) rotate(8deg); }
+}
+.lw-emoji { animation: lw-bounce 1.1s ease-in-out infinite; display: inline-block; }
+
+/* Wheel golden aura */
+@keyframes lw-spin-slow { to { transform: rotate(360deg); } }
+.lw-rays {
+  background: conic-gradient(from 0deg, transparent 0 8%, rgba(251,191,36,0.35) 10%, transparent 14% 25%, rgba(251,191,36,0.3) 27%, transparent 31% 42%, rgba(253,224,71,0.35) 44%, transparent 48% 58%, rgba(251,191,36,0.3) 60%, transparent 64% 75%, rgba(253,224,71,0.35) 77%, transparent 81% 92%, rgba(251,191,36,0.3) 94%, transparent 98%);
+  -webkit-mask-image: radial-gradient(circle, transparent 38%, #000 52%, transparent 72%);
+  mask-image: radial-gradient(circle, transparent 38%, #000 52%, transparent 72%);
+  animation: lw-spin-slow 24s linear infinite;
+}
+@keyframes lw-glow-pulse { 0%, 100% { opacity: 0.22; } 50% { opacity: 0.42; } }
+.lw-glow { animation: lw-glow-pulse 3.2s ease-in-out infinite; }
+.lw-glow-fast { animation-duration: 0.9s; }
+@keyframes lw-bulb-a { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+.lw-bulb { animation: lw-bulb-a 1.6s ease-in-out infinite; }
+.lw-bulb-b { animation-delay: 0.8s; }
+.lw-bulb-fast { animation-duration: 0.35s; }
+.lw-bulb-fast.lw-bulb-b { animation-delay: 0.175s; }
+
+
+/* =====================================================================
+   KUN REJIMI (html.light). Ilova komponentlari tun ranglarida yozilgan —
+   quyida ranglar kun rejimi uchun qayta belgilanadi.
+   ===================================================================== */
+html.light { color-scheme: light; }
+html.light body { background-color: #F3F5F9; color: #0F172A; }
+html.light ::-webkit-scrollbar-track { background: #F3F5F9; }
+html.light ::-webkit-scrollbar-thumb { background: #CBD5E1; }
+
+/* kulrang shkala (matn, chiziq, fon) teskari */
+html.light {
+  --color-slate-100: #0F172A;
+  --color-slate-200: #1E293B;
+  --color-slate-300: #334155;
+  --color-slate-400: #52617A;
+  --color-slate-500: #64748B;
+  --color-slate-600: #94A3B8;
+  --color-slate-700: #CBD5E1;
+  --color-slate-800: #E2E8F0;
+  --color-slate-900: #F1F5F9;
+}
+
+/* sahifa va kartalar */
+html.light [class*="bg-[#0B0F17]"] { background-color: #F3F5F9; }
+html.light [class*="bg-[#0B0F17]/"] { background-color: rgb(243 245 249 / 0.96); }
+html.light [class*="bg-[#151C28]"] { background-color: #FFFFFF; }
+html.light [class*="bg-[#151C28]/"] { background-color: rgb(255 255 255 / 0.7); }
+html.light [class*="bg-[#0E1524]"] { background-color: #EDF1F7; }
+html.light [class*="bg-[#0E1524]/"] { background-color: rgb(255 255 255 / 0.96); }
+html.light [class*="bg-[#1B2433]"], html.light [class*="bg-[#1B2333]"] { background-color: #F1F5F9; }
+html.light [class*="bg-[#121822]"] { background-color: #F8FAFC; }
+html.light [class*="hover:bg-[#1B2333]"]:hover { background-color: #F1F5F9; }
+html.light .from-\[\#1B2433\], html.light .from-\[\#151C28\] { --tw-gradient-from: #FFFFFF; }
+html.light .via-\[\#1B2433\] { --tw-gradient-via: #F6F8FC; }
+html.light .to-\[\#121822\] { --tw-gradient-to: #EAEFF6; }
+html.light .shadow-black\/20 { --tw-shadow-color: rgb(15 23 42 / 0.08); }
+html.light .bg-black\/80, html.light .bg-black\/85 { background-color: rgb(15 23 42 / 0.55); }
+
+/* oq matn -> to'q matn */
+html.light { --color-white: #0F172A; }
+html.light .fill-white { fill: #0F172A; }
+
+/* rangli matnlar (oq fonda o'qilishi uchun to'qroq) */
+html.light .text-amber-100 { color: #78350F; }
+html.light .text-amber-200 { color: #92400E; }
+html.light .text-amber-300, html.light .text-amber-400 { color: #B45309; }
+html.light .text-orange-400 { color: #C2410C; }
+html.light .fill-orange-400 { fill: #C2410C; }
+html.light .text-emerald-100, html.light .text-emerald-200 { color: #065F46; }
+html.light .text-emerald-300, html.light .text-emerald-400 { color: #047857; }
+html.light .text-rose-200 { color: #9F1239; }
+html.light .text-rose-300, html.light .text-rose-400 { color: #BE123C; }
+html.light .text-sky-200 { color: #075985; }
+html.light .text-sky-300, html.light .text-sky-400 { color: #0369A1; }
+html.light .text-violet-100, html.light .text-violet-300, html.light .text-violet-400 { color: #6D28D9; }
+html.light .text-pink-100, html.light .text-pink-300 { color: #BE185D; }
+html.light .text-cyan-100, html.light .text-cyan-300 { color: #0E7490; }
+html.light .fill-amber-400 { fill: #D97706; }
+
+/* rangli to'ldirilgan tugmalardagi oq matn oq bo'lib qoladi */
+html.light .bg-emerald-600.text-white, html.light .bg-rose-600.text-white,
+html.light .bg-emerald-500.text-white, html.light .bg-rose-500.text-white,
+html.light .bg-sky-500.text-white, html.light .bg-sky-400.text-white { color: #FFFFFF; }
+
+/* to'q rangli kartalar (baraban, sertifikat va h.k.) kun rejimida ham to'q qoladi: ichidagi matn o'z rangida */
+html.light .keep-dark { color: #F8FAFC; }
+html.light .keep-dark .text-white { color: #FFFFFF; }
+html.light .keep-dark .text-amber-300 { color: #FCD34D; }
+html.light .keep-dark .text-amber-200 { color: #FDE68A; }
+html.light .keep-dark .text-amber-100 { color: #FEF3C7; }
+html.light .keep-dark .text-pink-100 { color: #FCE7F3; }
+html.light .keep-dark .text-cyan-100 { color: #CFFAFE; }
+html.light .keep-dark [class*="text-purple-100"] { color: rgb(243 232 255 / 0.85); }
+html.light .keep-dark [class*="bg-[#0B0F17]"], html.light .keep-dark [class*="bg-[#151C28]"] { background-color: rgb(15 23 42 / 0.55); }
+
+/* yumshoq tus: sovg'alar kartasi va h.k. */
+html.light [class*="shadow-xl"] { --tw-shadow-color: rgb(15 23 42 / 0.1); }
+html.light input, html.light textarea, html.light select { color: #0F172A; }
+html.light input::placeholder, html.light textarea::placeholder { color: #94A3B8; }
+
+/* Streak oynasi */
+@keyframes sp-pop {
+  0% { opacity: 0; transform: scale(0.85) translateY(12px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes sp-flame {
+  0%, 100% { transform: scale(1) rotate(-3deg); }
+  50% { transform: scale(1.12) rotate(3deg); }
+}
+.sp-pop { animation: sp-pop 0.28s ease-out both; }
+.sp-flame { display: inline-block; animation: sp-flame 1.6s ease-in-out infinite; }
