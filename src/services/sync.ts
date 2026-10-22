@@ -98,6 +98,10 @@ export function mergeProfile(a: UserProfile, b: UserProfile): UserProfile {
   const ub = b.aiUsage;
   if (ua && ub) out.aiUsage = ua.day !== ub.day ? (ua.day > ub.day ? ua : ub) : { day: ua.day, count: Math.max(ua.count, ub.count) };
   else out.aiUsage = ua || ub;
+  const ba = a.blitzUsage;
+  const bb = b.blitzUsage;
+  if (ba && bb) out.blitzUsage = ba.day !== bb.day ? (ba.day > bb.day ? ba : bb) : { day: ba.day, count: Math.max(ba.count, bb.count) };
+  else out.blitzUsage = ba || bb;
 
   const ja = a.joinedAt || '';
   const jb = b.joinedAt || '';

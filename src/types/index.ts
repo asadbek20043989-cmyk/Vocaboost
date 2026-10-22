@@ -116,6 +116,7 @@ export interface UserProfile {
   customName?: boolean;
   customAvatar?: boolean;
   aiUsage?: { day: string; count: number };
+  blitzUsage?: { day: string; count: number }; // Blitz Duel: kuniga nechta o'ynalgani
   writingDays?: string[];
   joinedAt?: string; // ilovaga birinchi kirgan kun (YYYY-MM-DD)
   sentCerts?: string[]; // botga allaqachon yuborilgan sertifikatlar

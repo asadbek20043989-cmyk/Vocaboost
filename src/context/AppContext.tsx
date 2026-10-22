@@ -11,6 +11,11 @@ import { certificateBase64 } from '../services/certificate';
 import { INITIAL_BADGES } from '../data/leaderboardSeed';
 import { STARTER_WORDS } from '../data/starterWords';
 import { AI_DAILY_LIMIT } from '../services/ai';
+
+// Blitz Duel: kuniga 5 ta o'yin; g'alaba uchun eng ko'pi bilan 6 XP
+export const BLITZ_DAILY_LIMIT = 5;
+export const BLITZ_MAX_XP = 6;
+export const BLITZ_WIN_MIN_CORRECT = 3; // 5 tadan kamida 3 ta to'g'ri = g'alaba
 import { pickPrize, buildWheel, WheelPrize } from '../data/wheel';
 import { buildQuests, DEFAULT_QUEST_IDS } from '../data/quests';
 import { mergeGames, GameDef } from '../data/games';
@@ -143,6 +148,8 @@ interface AppContextType {
   addXp: (amount: number) => number;
   aiLeft: number;
   consumeAi: () => boolean;
+  blitzLeft: number;
+  consumeBlitz: () => boolean;
   markWritingDone: () => boolean;
   today: string;
   syncReady: boolean;
@@ -1603,6 +1610,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setProfile(p => ({ ...p, aiUsage: { day: todayKey(), count: (p.aiUsage && p.aiUsage.day === todayKey() ? p.aiUsage.count : 0) + 1 } }));
     return true;
   };
+  const blitzUsed = profile.blitzUsage && profile.blitzUsage.day === today ? profile.blitzUsage.count : 0;
+  const blitzLeft = Math.max(0, BLITZ_DAILY_LIMIT - blitzUsed);
+  const consumeBlitz = (): boolean => {
+    if (blitzLeft <= 0) return false;
+    setProfile(p => ({ ...p, blitzUsage: { day: todayKey(), count: (p.blitzUsage && p.blitzUsage.day === todayKey() ? p.blitzUsage.count : 0) + 1 } }));
+    return true;
+  };
   const markWritingDone = (): boolean => {
     const days = (profile.writingDays || []).filter(d => d.startsWith(today));
     if (days.length >= 3) return false;
@@ -1654,7 +1668,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         resetProgress, claimQuest, wheel: w, wheelPrizes: wheelCfg.prizes, wheelFreeSpins: wheelCfg.freeSpins,
         freeSpinsLeft, totalSpinsLeft, isPro, spinWheel, applyPrize, grantReferralSpin, leagueUsers, leagueLive, challengesLive,
         realtimeOn: realtimeEnabled, announcement, certificates, certificateView, showCertificate: setCertificateView,
-        notice, streakPopup, dismissStreakPopup, addXp, aiLeft, consumeAi, markWritingDone, today, syncReady, accountId: myId.current, isTelegram, linkAccount,
+        notice, streakPopup, dismissStreakPopup, addXp, aiLeft, consumeAi, blitzLeft, consumeBlitz, markWritingDone, today, syncReady, accountId: myId.current, isTelegram, linkAccount,
       }}
     >
       {children}
