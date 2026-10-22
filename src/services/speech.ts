@@ -1,28 +1,40 @@
-// Talaffuz (Netlify kreditini UMUMAN sarflamaydi): brauzer to'g'ridan-to'g'ri tashqi ovoz manbasidan oladi.
-//   1) Google Translate TTS (inglizcha, <audio> orqali — foydalanuvchi bosishi bilan bir zumda ijro etiladi)
-//   2) Free Dictionary audio (haqiqiy odam ovozi; faqat bitta so'z uchun) — 1-manba ishlamasa
-//   3) Brauzerning o'z ovozi (en-US) — oxirgi zaxira
-// Ixtiyoriy: VITE_SERVER_TTS=1 bo'lsa Netlify /tts funksiyasi ham 1-o'rinda ishlatiladi (kredit sarflaydi, tavsiya etilmaydi).
+// Talaffuz (v4.6.2). Manbalar ketma-ketligi (birinchisi ishlamasa keyingisiga tez o'tiladi):
+//  1) Yakka so'z uchun — haqiqiy INSON ovozi yozuvi (Free Dictionary API, bepul, natural talaffuz)
+//  2) Serverdagi neyral ovoz (Netlify /tts, Microsoft Edge)
+//  3) Brauzerning o'z ovozi (en-US) — eng so'nggi zaxira
 // Shadowing uchun: Web Speech API SpeechRecognition (bepul).
 
 const TTS_URL: string = ((import.meta as any).env?.VITE_TTS_URL as string) || '/.netlify/functions/tts';
-const SERVER_TTS = String((import.meta as any).env?.VITE_SERVER_TTS ?? '0') === '1';
-const GOOGLE_TTS = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en-US&q=';
-const DICT_API = 'https://api.dictionaryapi.dev/api/v2/entries/en/';
-const MAX_GOOGLE_CHARS = 180;
-const START_TIMEOUT_MS = 4500; // shu vaqt ichida ovoz boshlanmasa, keyingi manbaga o'tiladi
+const SERVER_TTS = String((import.meta as any).env?.VITE_SERVER_TTS ?? '1') !== '0';
+const TTS_VER = '2'; // eski (robot ovozli) keshlangan fayllarni almashtirish uchun
+const SERVER_TIMEOUT_MS = 7000; // yangi so'zning birinchi marta yaratilishi bir necha soniya olishi mumkin
+const HUMAN_TIMEOUT_MS = 4000;
+const DICT_URL = 'https://api.dictionaryapi.dev/api/v2/entries/en/';
+const WORD_RE = /^[A-Za-z][A-Za-z'’-]*$/;
 
 // iOS/Telegram WebView: bitta umumiy <audio> elementini birinchi bosishda "ochib" qo'yamiz,
-// shunda keyin avtomatik (bosishsiz) chaqirilgan ovozlar ham ijro etiladi.
+// shunda keyin kutishdan so'ng (fetch tugagach) chaqirilgan ovozlar ham ijro etiladi.
 const SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
 const sharedAudio: HTMLAudioElement | null = typeof Audio !== 'undefined' ? new Audio() : null;
 let unlocked = false;
 function unlockAudio() {
-  if (unlocked || !sharedAudio) return;
+  if (unlocked) return;
   unlocked = true;
   try {
-    sharedAudio.src = SILENT;
-    sharedAudio.play().catch(() => {});
+    if (sharedAudio) {
+      sharedAudio.src = SILENT;
+      sharedAudio.play().catch(() => {});
+    }
+  } catch {
+    /* ignore */
+  }
+  // speechSynthesis ham foydalanuvchi bosishi bilan "ochiladi" (iOS/Android)
+  try {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      const u = new SpeechSynthesisUtterance(' ');
+      u.volume = 0;
+      window.speechSynthesis.speak(u);
+    }
   } catch {
     /* ignore */
   }
@@ -33,26 +45,56 @@ if (typeof window !== 'undefined') {
 
 let currentAudio: HTMLAudioElement | null = null;
 let reqId = 0;
-let googleFails = 0; // ketma-ket muvaffaqiyatsiz urinishlar (3 tadan keyin bu seansda o'tkazib yuboriladi)
-const dictCache = new Map<string, string | null>(); // so'z -> audio URL (yoki null — topilmadi)
+// KREDIT TEJASH: server ketma-ket 2 marta xato bersa, 30 daqiqa umuman so'ramaymiz (holat saqlanadi, sahifa yangilansa ham).
+// Xato bergan matn shu seansda qayta so'ralmaydi.
+const COOLDOWN_KEY = 'vb_tts_cooldown_v1';
+const COOLDOWN_MS = 30 * 60 * 1000;
+let serverFails = 0;
+const failedKeys = new Set<string>();
+function serverCoolingDown(): boolean {
+  try {
+    return Date.now() < Number(localStorage.getItem(COOLDOWN_KEY) || 0);
+  } catch {
+    return false;
+  }
+}
+function startCooldown() {
+  try {
+    localStorage.setItem(COOLDOWN_KEY, String(Date.now() + COOLDOWN_MS));
+  } catch {
+    /* ignore */
+  }
+}
+
+// ---------- Brauzer ovozi (zaxira) ----------
 
 let cachedVoice: SpeechSynthesisVoice | null = null;
+function scoreVoice(v: SpeechSynthesisVoice): number {
+  let sc = 0;
+  if (/^en[-_]US$/i.test(v.lang)) sc += 30;
+  else if (/^en[-_](GB|AU|CA|IE)$/i.test(v.lang)) sc += 18;
+  else if (/^en([-_]|$)/i.test(v.lang)) sc += 10;
+  // Sifatli (neyral / tarmoq) ovozlar — robotga o'xshamaydi
+  if (/Natural|Neural|Online/i.test(v.name)) sc += 60;
+  if (/Google US English|Google UK English/i.test(v.name)) sc += 45;
+  if (/Samantha|Ava|Allison|Susan|Zoe|Daniel|Karen|Moira|Serena|Alex|Aria|Jenny|Guy/i.test(v.name)) sc += 40;
+  // Eski offlayn "robot" ovozlar — oxirgi tanlov
+  if (/\b(David|Zira|Mark|Hazel|George|Eddy|Fred|Albert|Bad News|Bells|Boing|Cellos|Trinoids|Whisper|Zarvox)\b|eSpeak|Pico|compact/i.test(v.name)) sc -= 25;
+  return sc;
+}
 function loadVoices(): void {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
   const voices = window.speechSynthesis.getVoices();
-  if (voices.length > 0) {
-    const en = voices.filter(v => /^en([-_]|$)/i.test(v.lang));
-    cachedVoice =
-      en.find(v => /en[-_]US/i.test(v.lang) && /Google|Natural|Samantha|Aria|Jenny/i.test(v.name)) ||
-      en.find(v => /en[-_]US/i.test(v.lang)) ||
-      en.find(v => /en[-_]GB/i.test(v.lang)) ||
-      en[0] ||
-      null;
-  }
+  const en = voices.filter(v => /^en([-_]|$)/i.test(v.lang));
+  cachedVoice = en.length ? en.slice().sort((a, b) => scoreVoice(b) - scoreVoice(a))[0] : null;
 }
 if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
   loadVoices();
-  window.speechSynthesis.onvoiceschanged = loadVoices;
+  try {
+    window.speechSynthesis.addEventListener('voiceschanged', loadVoices);
+  } catch {
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }
 }
 
 export function isSpeechAvailable(): boolean {
@@ -74,26 +116,102 @@ export function stopSpeaking(): void {
   }
 }
 
-function browserSpeak(text: string, rate: number): void {
+function browserSpeak(text: string, rate: number, my: number): void {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-  try {
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'en-US';
-    u.rate = Math.min(1, Math.max(0.6, rate));
-    if (!cachedVoice) loadVoices();
-    if (cachedVoice) {
-      u.voice = cachedVoice;
-      u.lang = cachedVoice.lang || 'en-US';
+  const synth = window.speechSynthesis;
+  const run = () => {
+    if (my !== reqId) return;
+    try {
+      if (!cachedVoice) loadVoices();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'en-US';
+      u.rate = Math.min(1, Math.max(0.6, rate));
+      u.pitch = 1;
+      u.volume = 1;
+      if (cachedVoice) {
+        u.voice = cachedVoice;
+        u.lang = cachedVoice.lang || 'en-US';
+      }
+      synth.speak(u);
+      // Chrome xatosi: ba'zan pauza holatida qotib qoladi
+      if (synth.paused) synth.resume();
+    } catch {
+      /* ignore */
     }
-    window.speechSynthesis.speak(u);
+  };
+  try {
+    synth.cancel();
+  } catch {
+    /* ignore */
+  }
+  // Chrome'da cancel() dan darhol keyingi speak() ba'zan yutilib ketadi — ozgina kutamiz.
+  // Ovozlar ro'yxati hali yuklanmagan bo'lsa (telefon), 600 ms gacha kutamiz.
+  const wait = synth.getVoices().length === 0 ? 600 : 60;
+  setTimeout(() => {
+    if (!cachedVoice) loadVoices();
+    run();
+  }, wait);
+}
+
+// ---------- Inson ovozi yozuvlari (Free Dictionary API) ----------
+
+const HUMAN_LS_KEY = 'vb_human_audio_v1';
+const humanCache = new Map<string, string | null>();
+try {
+  const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(HUMAN_LS_KEY) : null;
+  if (raw) Object.entries(JSON.parse(raw) as Record<string, string>).forEach(([k, v]) => humanCache.set(k, v));
+} catch {
+  /* ignore */
+}
+function saveHuman(word: string, url: string) {
+  try {
+    const obj: Record<string, string> = {};
+    humanCache.forEach((v, k) => {
+      if (v) obj[k] = v;
+    });
+    obj[word] = url;
+    // juda kattalashib ketmasin
+    const keys = Object.keys(obj);
+    if (keys.length > 1500) delete obj[keys[0]];
+    localStorage.setItem(HUMAN_LS_KEY, JSON.stringify(obj));
   } catch {
     /* ignore */
   }
 }
 
+async function getHumanAudio(word: string): Promise<string | null> {
+  if (humanCache.has(word)) return humanCache.get(word) || null;
+  const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const t = setTimeout(() => ctl?.abort(), HUMAN_TIMEOUT_MS);
+  try {
+    const r = await fetch(DICT_URL + encodeURIComponent(word), { signal: ctl?.signal });
+    if (r.status === 404) {
+      humanCache.set(word, null); // bu so'z lug'atda yo'q — qayta so'ramaymiz
+      return null;
+    }
+    if (!r.ok) return null;
+    const data: any = await r.json();
+    const urls: string[] = [];
+    for (const entry of Array.isArray(data) ? data : []) {
+      for (const ph of entry?.phonetics || []) {
+        if (ph?.audio) urls.push(String(ph.audio).replace(/^http:/, 'https:').replace(/^\/\//, 'https://'));
+      }
+    }
+    const best = urls.find(u => /-us\.mp3/i.test(u)) || urls.find(u => /-uk\.mp3/i.test(u)) || urls[0] || null;
+    humanCache.set(word, best);
+    if (best) saveHuman(word, best);
+    return best;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+// ---------- Ijro ----------
+
 /** Audio manbasini ijro etadi. Ovoz haqiqatan boshlansa true, xato/kechikish bo'lsa false qaytaradi */
-function playUrl(url: string, rate: number, my: number): Promise<boolean> {
+function playUrl(url: string, rate: number, my: number, timeoutMs: number): Promise<boolean> {
   return new Promise(resolve => {
     if (my !== reqId) return resolve(true); // yangi so'rov chiqib ketgan — hech narsa qilinmaydi
     const a = sharedAudio || new Audio();
@@ -108,7 +226,16 @@ function playUrl(url: string, rate: number, my: number): Promise<boolean> {
       }
       resolve(ok);
     };
-    const timer = setTimeout(() => finish(false), START_TIMEOUT_MS);
+    const timer = setTimeout(() => {
+      if (!settled && (a as any)._rid === my) {
+        try {
+          a.pause();
+        } catch {
+          /* ignore */
+        }
+      }
+      finish(false);
+    }, timeoutMs);
     currentAudio = a;
     (a as any)._rid = my;
     a.onplaying = () => finish(true);
@@ -124,63 +251,41 @@ function playUrl(url: string, rate: number, my: number): Promise<boolean> {
   });
 }
 
-async function dictionaryAudio(word: string): Promise<string | null> {
-  const key = word.toLowerCase();
-  if (dictCache.has(key)) return dictCache.get(key) ?? null;
-  try {
-    const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), 4000);
-    const r = await fetch(DICT_API + encodeURIComponent(key), { signal: ctl.signal });
-    clearTimeout(t);
-    if (!r.ok) throw new Error('dict ' + r.status);
-    const j = await r.json();
-    const urls: string[] = [];
-    (Array.isArray(j) ? j : []).forEach((e: any) => (e?.phonetics || []).forEach((ph: any) => ph?.audio && urls.push(String(ph.audio))));
-    const pick = urls.find(u => /-us\./i.test(u)) || urls.find(u => /-uk\./i.test(u)) || urls[0] || null;
-    dictCache.set(key, pick ? pick.replace(/^http:/, 'https:') : null);
-  } catch {
-    dictCache.set(key, null);
-  }
-  return dictCache.get(key) ?? null;
-}
-
-function shortenForGoogle(text: string): string {
-  if (text.length <= MAX_GOOGLE_CHARS) return text;
-  const cut = text.slice(0, MAX_GOOGLE_CHARS);
-  const i = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf(', '), cut.lastIndexOf(' '));
-  return (i > 40 ? cut.slice(0, i) : cut).trim();
-}
-
 export function speakEnglish(text: string, rate: number = 0.9): void {
-  const clean = text.replace(/[*_#`~]/g, '').replace(/\s+/g, ' ').trim().slice(0, 1200);
+  const clean = text.replace(/[*_#`~]/g, '').replace(/\s+/g, ' ').trim().slice(0, 300);
   if (!clean) return;
   stopSpeaking();
   const my = reqId; // stopSpeaking() hisoblagichni oshirdi — shu so'rovning raqami
-  const isWord = /^[A-Za-z][A-Za-z'’-]*$/.test(clean);
+  const isWord = WORD_RE.test(clean);
+  // Bitta so'z kichik harfga o'tkaziladi: bir xil URL = bir xil kesh
+  const key = isWord ? clean.toLowerCase() : clean;
+
   (async () => {
-    // 0) Ixtiyoriy server ovozi (kredit sarflaydi — sukut bo'yicha o'chiq)
-    if (SERVER_TTS && (await playUrl(`${TTS_URL}?text=${encodeURIComponent(clean)}&v=1`, rate, my))) return;
-    // 1) Google TTS — havola sinxron beriladi, shuning uchun telefon "bosish" ruxsatini yo'qotmaydi
-    if (googleFails < 3) {
-      const ok = await playUrl(GOOGLE_TTS + encodeURIComponent(shortenForGoogle(clean)), rate, my);
+    // 1) Yakka so'z: haqiqiy inson yozuvi
+    if (isWord) {
+      const url = await getHumanAudio(key);
+      if (my !== reqId) return;
+      if (url && (await playUrl(url, rate, my, HUMAN_TIMEOUT_MS))) return;
+      if (my !== reqId) return;
+    }
+    // 2) Server neyral ovozi
+    if (SERVER_TTS && !failedKeys.has(key) && !serverCoolingDown()) {
+      const ok = await playUrl(`${TTS_URL}?text=${encodeURIComponent(key)}&v=${TTS_VER}`, rate, my, SERVER_TIMEOUT_MS);
       if (my !== reqId) return;
       if (ok) {
-        googleFails = 0;
+        serverFails = 0;
         return;
       }
-      googleFails++;
+      failedKeys.add(key);
+      if (++serverFails >= 2) {
+        startCooldown();
+        serverFails = 0;
+      }
     }
-    // 2) Haqiqiy odam ovozi (faqat bitta so'z)
-    if (isWord) {
-      const url = await dictionaryAudio(clean);
-      if (my !== reqId) return;
-      if (url && (await playUrl(url, rate, my))) return;
-    }
-    if (my !== reqId) return;
     // 3) Brauzer ovozi
-    browserSpeak(clean, rate);
+    browserSpeak(clean, rate, my);
   })().catch(() => {
-    if (my === reqId) browserSpeak(clean, rate);
+    if (my === reqId) browserSpeak(clean, rate, my);
   });
 }
 

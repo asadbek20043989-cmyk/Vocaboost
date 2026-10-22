@@ -186,7 +186,7 @@ Ushbu versiyada barcha so'ralgan funksiyalar va tizim takomillashtirishlari to'l
 
 ---
 
-# v4.6.0 yangiliklari
+# v4.6.0 / v4.6.1 yangiliklari
 
 **Deploydan oldin:** Firebase qoidalari o'zgarmadi, yangi env o'zgaruvchisi kerak emas.
 
@@ -197,8 +197,8 @@ Ushbu versiyada barcha so'ralgan funksiyalar va tizim takomillashtirishlari to'l
 - **Bir marta qilish kerak:** oldin XP si qo'lda o'zgartirilgan foydalanuvchi (masalan, Muxarram) uchun Admin → 🏆 Liga'da XP ni yana bir marta kiritib saqlang.
 
 ## 2. Talaffuz (Netlify kreditini umuman sarflamaydi)
-- Ovoz endi brauzerdan to'g'ridan-to'g'ri tashqi manbadan olinadi: 1) Google Translate TTS (inglizcha), 2) Free Dictionary (haqiqiy odam ovozi, bitta so'z uchun), 3) brauzer ovozi (en-US). Ketma-ket ishlamasa keyingisiga o'tadi, shuning uchun so'z «jim» qolmaydi.
-- Netlify `/tts` funksiyasi sukut bo'yicha o'chiq (kredit sarflamaydi). Faqat `VITE_SERVER_TTS=1` bo'lsa ishlaydi.
+- Talaffuz tartibi: (1) yakka so'z — haqiqiy inson yozuvi (bepul Free Dictionary API, Netlify'ga tegmaydi); (2) `/tts` (Microsoft neyral ovozi, 1 yil keshlanadi); (3) brauzer ovozi.
+- Kredit tejash: `/tts` faqat lug'atda yo'q so'zlar va gaplar uchun chaqiriladi; xato bo'lsa 6 s dan oshmaydi, server 2 marta xato bersa mijoz 30 daqiqa so'ramaydi, server esa qisqa vaqt tez rad etadi. Google zaxirasi olib tashlangan (sifat va kredit uchun). Serverni butunlay o'chirish: `VITE_SERVER_TTS=0`.
 - Service Worker begona manbalarni (audio) endi ushlamaydi.
 
 ## 3. Chellenj sertifikatlari
@@ -209,5 +209,5 @@ Ushbu versiyada barcha so'ralgan funksiyalar va tizim takomillashtirishlari to'l
 
 ## 4. Yangi chellenj turlari
 - **Mavzuli chellenj:** admin «Bugungi mashqlar» bo'limidagi lug'at to'plamini tanlaydi. Ball: to'plamdagi o'rganilgan so'z — 1 ball, yodlangan so'z — yana +1 ball (qatnashish paytidagi holatdan boshlab).
-- **Marafon (3 jon):** cheksiz savol, faqat 3 ta xatoga huquq (admin jonlar sonini o'zgartira oladi). Natija — jonlar tugaguncha topilgan so'zlar soni. Har kimga **faqat 1 ta urinish**; boshlash va tugash vaqtini admin belgilaydi. Teng natijada oldin tugatgan yuqori turadi.
+- **Marafon (3 jon):** cheksiz savol, 3 jon va har bir savolga 30 soniya (admin ikkalasini o‘zgartira oladi; vaqt tugasa o‘yin tugaydi). Natija — jonlar tugaguncha topilgan so'zlar soni. Har kimga **faqat 1 ta urinish**; boshlash va tugash vaqtini admin belgilaydi. Teng natijada oldin tugatgan yuqori turadi.
 - Oddiy XP / yangi so'z / yodlash chellenjlari avvalgidek ishlaydi.

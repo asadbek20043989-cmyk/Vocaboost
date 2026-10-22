@@ -1563,6 +1563,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         packTitle: pack?.title || '',
         packTotal: pack?.words.length || 0,
         lives: Math.max(1, Number(m.lives) || 3),
+        secs: Math.max(5, Number(m.secs) || 30),
         myStarted: !!me?.started,
         myDone: !!me?.done,
         metric,

@@ -76,7 +76,7 @@ const Card: React.FC<{ c: Challenge; meId: string }> = ({ c, meId }) => {
       )}
       {c.kind === 'survival' && (
         <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 px-3 py-2 text-xs text-rose-100 space-y-2">
-          <div className="flex items-start gap-2"><Heart className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" /> <span>Cheksiz savollar, atigi <b>{c.lives} ta jon</b>. Jonlar tugaguncha ketma-ket ko‘proq so‘z tarjimasini toping. <b>Har kimga faqat 1 ta urinish.</b></span></div>
+          <div className="flex items-start gap-2"><Heart className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" /> <span>Cheksiz savollar, atigi <b>{c.lives} ta jon</b>. Har bir so‘z tarjimasiga <b>{c.secs} soniya</b> beriladi: vaqt tugasa yoki jonlar tugasa o‘yin tugaydi, topilgan so‘zlar soni hisoblanadi. <b>Har kimga faqat 1 ta urinish.</b></span></div>
           {!ended && !upcoming && !c.myStarted && (
             <button type="button" disabled={busy} onClick={async () => { triggerHaptic('heavy'); if (!window.confirm('Marafonni boshlaysizmi? Faqat 1 ta urinish beriladi.')) return; setBusy(true); setErr(''); try { const r = await openSurvival(c.id); if (!r.ok) setErr(r.error || 'Xatolik'); } catch { setErr('Boshlab bo‘lmadi. Internetni tekshiring'); } finally { setBusy(false); } }} className="w-full h-12 rounded-xl bg-rose-500 text-white font-extrabold text-sm disabled:opacity-60 active:scale-[0.98] transition-all">{busy ? 'Yuklanmoqda…' : 'Marafonni boshlash'}</button>
           )}

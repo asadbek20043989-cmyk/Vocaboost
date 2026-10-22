@@ -203,6 +203,7 @@ export interface Challenge {
   packTitle: string;
   packTotal: number;
   lives: number; // survival: jonlar soni
+  secs: number; // survival: bitta savolga beriladigan soniya
   myStarted: boolean;
   myDone: boolean;
   metric: DuelMetric;

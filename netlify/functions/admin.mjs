@@ -554,7 +554,7 @@ export const handler = async event => {
         }
         const meta = {
           title, desc: str(body.desc, 400), prize: str(body.prize, 200), kind, metric: kind === 'metric' ? metric : 'xp', startsAt, endsAt,
-          goal: num(body.goal, 1000000), xpTop: num(body.xpTop, 5000), packId, lives: kind === 'survival' ? Math.max(1, num(body.lives || 3, 10)) : 0,
+          goal: num(body.goal, 1000000), xpTop: num(body.xpTop, 5000), packId, lives: kind === 'survival' ? Math.max(1, num(body.lives || 3, 10)) : 0, secs: kind === 'survival' ? Math.max(5, num(body.secs || 30, 120)) : 0,
           certs, published: body.published !== false, createdAt: prev.createdAt || Date.now(), finalized: false,
         };
         await call('PUT', `challenges/${id}/meta`, meta);
