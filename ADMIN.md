@@ -183,3 +183,31 @@ Ushbu versiyada barcha so'ralgan funksiyalar va tizim takomillashtirishlari to'l
    - **Intervalli takrorlash (srsFactor):** SuperMemo SM-2 adaptiv takrorlash koeffitsiyenti qo'shildi — qiyin so'zlar tez-tez, oson so'zlar kamroq takrorlanib, o'rganish samaradorligini 2 karra oshiradi.
    - **Reyting jadvali (Liderlar):** Dastlab eng kuchli Top-50 ko'rsatiladi, "Yana ko'rsatish" tugmasi orqali keyingi 50 talik bosqichma-bosqich ochiladi.
    - **Streak haftalik kalendari:** Bosh sahifada dushanbadan yakshanbagacha bo'lgan kunlik o'qish ritmi chiroyli ko'rsatkichlar bilan aks etadi.
+
+---
+
+# v4.6.0 yangiliklari
+
+**Deploydan oldin:** Firebase qoidalari o'zgarmadi, yangi env o'zgaruvchisi kerak emas.
+
+## 1. Admin XP ni o'zgartirsa — foydalanuvchi XP si ustiga qo'shiladi (tuzatildi)
+- Avval admin XP ni o'zgartirgach, foydalanuvchi qurilmasi eski XP bilan Ligani qayta yozib yuborardi.
+- Endi admin o'zgartirishi **farq (`adj`/`adjV`)** sifatida Liga yozuviga yoziladi va foydalanuvchining ilovasi bu farqni o'z XP siga **bir marta** qo'shadi. Shundan keyin yig'gan XP **admin qo'ygan qiymatning ustiga** qo'shiladi. Eski «xpset» sovg'alari endi ishlatilmaydi.
+- «Yangi mavsum» (hammani 0 qilish) ham shu usulda ishlaydi.
+- **Bir marta qilish kerak:** oldin XP si qo'lda o'zgartirilgan foydalanuvchi (masalan, Muxarram) uchun Admin → 🏆 Liga'da XP ni yana bir marta kiritib saqlang.
+
+## 2. Talaffuz (Netlify kreditini umuman sarflamaydi)
+- Ovoz endi brauzerdan to'g'ridan-to'g'ri tashqi manbadan olinadi: 1) Google Translate TTS (inglizcha), 2) Free Dictionary (haqiqiy odam ovozi, bitta so'z uchun), 3) brauzer ovozi (en-US). Ketma-ket ishlamasa keyingisiga o'tadi, shuning uchun so'z «jim» qolmaydi.
+- Netlify `/tts` funksiyasi sukut bo'yicha o'chiq (kredit sarflamaydi). Faqat `VITE_SERVER_TTS=1` bo'lsa ishlaydi.
+- Service Worker begona manbalarni (audio) endi ushlamaydi.
+
+## 3. Chellenj sertifikatlari
+- Yakunlanganda **har bir ishtirokchiga o'z o'rniga qarab** sertifikat beriladi: 1-o'rin **Oltin**, 2-o'rin **Kumush**, 3-o'rin **Bronza**, maqsadga yetganlar (1-3 o'rindan tashqari) **Marafon**, qolganlar **Minnatdorchilik**.
+- Sarlavha va izohlar Admin → 🏁 Chellenjlar formasida (5 juft) **chellenj boshlanishidan oldin** yoziladi. `{place}`, `{challenge}`, `{score}`, `{goal}` ishlatish mumkin. Bo'sh qoldirilsa standart matn qo'yiladi. Ism-familiya avtomatik yoziladi.
+- «Yakunlash 🏆» bosilgach admin sahifasi sertifikat rasmlarini chizib, har bir foydalanuvchining bot chatiga **tantanali xabar** bilan yuboradi (sahifani yopmang). Yuborilmaganlari uchun jadvalda «📨 Telegramga yuborish» tugmasi bor; baribir foydalanuvchi ilovani ochganda sertifikat o'zi keladi (ikki marta emas).
+- Yakunlash qayta bosilsa ham sertifikat ikki marta berilmaydi.
+
+## 4. Yangi chellenj turlari
+- **Mavzuli chellenj:** admin «Bugungi mashqlar» bo'limidagi lug'at to'plamini tanlaydi. Ball: to'plamdagi o'rganilgan so'z — 1 ball, yodlangan so'z — yana +1 ball (qatnashish paytidagi holatdan boshlab).
+- **Marafon (3 jon):** cheksiz savol, faqat 3 ta xatoga huquq (admin jonlar sonini o'zgartira oladi). Natija — jonlar tugaguncha topilgan so'zlar soni. Har kimga **faqat 1 ta urinish**; boshlash va tugash vaqtini admin belgilaydi. Teng natijada oldin tugatgan yuqori turadi.
+- Oddiy XP / yangi so'z / yodlash chellenjlari avvalgidek ishlaydi.

@@ -66,7 +66,19 @@ export function mergeProfile(a: UserProfile, b: UserProfile): UserProfile {
   // XP: odatda kattasi. Lekin admin XP ni o'zgartirgan (xpSets) bo'lsa — o'sha o'zgartirishni ko'proq qo'llagan tomon yutadi
   const sa = arr(a.xpSets).length;
   const sb = arr(b.xpSets).length;
-  out.xp = sa !== sb ? (sa > sb ? a.xp : b.xp) || 0 : Math.max(a.xp || 0, b.xp || 0);
+  const va = a.adjV || 0;
+  const vb = b.adjV || 0;
+  if (va !== vb) {
+    // Admin XP tuzatishini ko'proq qo'llagan tomon yutadi (shunda tuzatish boshqa qurilma tomonidan bekor qilinmaydi)
+    const w = va > vb ? a : b;
+    out.xp = w.xp || 0;
+    out.adjV = w.adjV;
+    out.adjApplied = w.adjApplied;
+  } else {
+    out.xp = sa !== sb ? (sa > sb ? a.xp : b.xp) || 0 : Math.max(a.xp || 0, b.xp || 0);
+    out.adjV = a.adjV || b.adjV;
+    out.adjApplied = a.adjApplied ?? b.adjApplied;
+  }
   out.xpSets = uniqSorted([...arr(a.xpSets), ...arr(b.xpSets)]).slice(-30);
   out.hasCompletedOnboarding = !!(a.hasCompletedOnboarding || b.hasCompletedOnboarding);
   out.updatedAt = Math.max(a.updatedAt || 0, b.updatedAt || 0) || undefined;

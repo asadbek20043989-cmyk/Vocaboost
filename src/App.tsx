@@ -6,6 +6,7 @@ import { BottomNav } from './components/BottomNav';
 import { HomeTab } from './components/HomeTab';
 import { WordsTab } from './components/WordsTab';
 import { GamesTab, GameScreen } from './components/Games';
+import { SurvivalRun } from './components/SurvivalRun';
 import { LearnSession } from './components/Learn';
 import { LeaderboardTab } from './components/LeaderboardTab';
 import { CertificateModal } from './components/CertificateModal';
@@ -81,6 +82,7 @@ const MainScreen: React.FC = () => {
 
   if (overlay?.type === 'learn') return <><LearnSession />{certificate}{toast}</>;
   if (overlay?.type === 'game') return <><GameScreen id={overlay.id} />{certificate}{toast}</>;
+  if (overlay?.type === 'survival') return <><SurvivalRun id={overlay.id} />{certificate}{toast}</>;
 
   return (
     <div className="min-h-screen bg-[#0B0F17] text-slate-100 flex flex-col justify-between selection:bg-amber-500/20 selection:text-amber-300">

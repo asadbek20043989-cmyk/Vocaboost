@@ -172,24 +172,29 @@
     <section id="t-chal" class="hide">
       <div class="card">
         <h2>🏁 Chellenj va marafonlar <span class="small" id="chCount"></span></h2>
-        <p class="small">Foydalanuvchilar ilovada (Liga → «🏁 Chellenj») qatnashadi. Natija — qatnashgan paytidan boshlab to'plagan XP / yangi so'z / yodlangan so'z. Muddat tugagach «Yakunlash» tugmasi natijalarni qotiradi, g'oliblarga sertifikat (+XP) va maqsadga yetganlarga «Marafon» sertifikatini avtomatik beradi.</p>
-        <div class="scroll"><table><thead><tr><th>Nomi</th><th>Mezon</th><th>Muddat (Toshkent)</th><th>Ishtirokchi</th><th>Holat</th><th></th></tr></thead><tbody id="chBody"></tbody></table></div>
+        <p class="small">Chellenj turlari: <b>XP / so'z</b> (oddiy), <b>Mavzuli</b> (maxsus lug'at to'plamini o'zlashtirish) va <b>Marafon</b> (cheksiz savol, faqat 3 jon, har kimga 1 ta urinish). Muddat tugagach «Yakunlash» bosiladi: har bir ishtirokchiga o'z o'rniga qarab sertifikat beriladi — <b>1-o'rin Oltin, 2-o'rin Kumush, 3-o'rin Bronza, maqsadga yetganlarga Marafon, qolganlarga Minnatdorchilik</b>. Sertifikat matnlarini chellenj boshlanishidan oldin shu yerda yozib qo'yasiz; ism-familiya esa avtomatik yoziladi. «Telegramga yuborish» sertifikat rasmlarini ishtirokchilarning bot chatiga tantanali xabar bilan jo'natadi.</p>
+        <div class="scroll"><table><thead><tr><th>Nomi</th><th>Tur</th><th>Muddat (Toshkent)</th><th>Ishtirokchi</th><th>Holat</th><th></th></tr></thead><tbody id="chBody"></tbody></table></div>
+        <div class="msg s hide" id="chSendBox" style="margin-top:10px"></div>
       </div>
       <div class="card">
         <h2 id="chEdTitle">Yangi chellenj</h2>
         <div class="f3">
           <div><label>Nomi *</label><input id="ch_title" placeholder="Masalan: Oktabr marafoni" /></div>
-          <div><label>Nima bo'yicha?</label><select id="ch_metric"><option value="xp">XP yig'ish</option><option value="words">Yangi so'zlar o'rganish</option><option value="mastered">So'zlarni yodlash</option></select></div>
-          <div><label>Maqsad (ixtiyoriy, son)</label><input id="ch_goal" type="number" min="0" value="0" /></div>
+          <div><label>Chellenj turi</label><select id="ch_kind"><option value="metric">XP / so'z (oddiy)</option><option value="themed">Mavzuli (lug'at to'plami)</option><option value="survival">Marafon (3 jon, 1 urinish)</option></select></div>
+          <div id="ch_metricBox"><label>Nima bo'yicha?</label><select id="ch_metric"><option value="xp">XP yig'ish</option><option value="words">Yangi so'zlar o'rganish</option><option value="mastered">So'zlarni yodlash</option></select></div>
+          <div id="ch_packBox" class="hide"><label>Lug'at to'plami * (Bugungi mashqlar bo'limidan)</label><select id="ch_pack"></select></div>
+          <div id="ch_livesBox" class="hide"><label>Jonlar soni</label><input id="ch_lives" type="number" min="1" max="10" value="3" /></div>
+          <div><label id="ch_goalLbl">Maqsad (ixtiyoriy, son)</label><input id="ch_goal" type="number" min="0" value="0" /></div>
           <div><label>Boshlanishi *</label><input id="ch_start" type="datetime-local" /></div>
           <div><label>Tugashi *</label><input id="ch_end" type="datetime-local" /></div>
-          <div><label>Nechta o'rin sertifikat oladi</label><input id="ch_top" type="number" min="0" max="20" value="3" /></div>
-          <div><label>G'oliblarga bonus XP (har biriga)</label><input id="ch_xp" type="number" min="0" max="5000" value="0" /></div>
+          <div><label>1-3 o'rin egalariga bonus XP (har biriga)</label><input id="ch_xp" type="number" min="0" max="5000" value="0" /></div>
         </div>
         <label>Tavsif — qoidalar, qanday qatnashish</label><textarea id="ch_desc" style="min-height:80px"></textarea>
-        <label>Sovrin (matn, sertifikatda izoh bo'ladi)</label><input id="ch_prize" placeholder="Masalan: 1-o'rin — 1 oylik VIP va sertifikat" />
-        <label class="chk"><input type="checkbox" id="ch_fin" /> Maqsadga yetgan hammaga «Marafon» sertifikati ham berilsin (maqsad kiritilgan bo'lsa)</label>
+        <label>Sovrin (matn; Oltin/Kumush/Bronza izohi bo'sh qolsa shu ishlatiladi)</label><input id="ch_prize" placeholder="Masalan: 1-o'rin — 1 oylik VIP va sertifikat" />
         <label class="chk"><input type="checkbox" id="ch_pub" checked /> Foydalanuvchilarga ko'rsatish</label>
+        <h3 style="margin:14px 0 4px">🎓 Yakunda avtomatik beriladigan sertifikatlar</h3>
+        <p class="small">Har biri uchun <b>Sarlavha</b> (katta yozuv) va <b>Izoh</b> (kichik yozuv). Bo'sh qoldirilsa standart matn qo'yiladi. Ishlatish mumkin: <code>{place}</code> o'rin, <code>{challenge}</code> chellenj nomi, <code>{score}</code> natija, <code>{goal}</code> maqsad. Ism-familiya sertifikatga avtomatik yoziladi.</p>
+        <div id="chCertBox"></div>
         <div class="row" style="margin-top:10px"><button id="chSave">Saqlash</button><button class="sec" id="chNew">Yangi</button></div>
       </div>
     </section>
@@ -467,7 +472,7 @@ async function load() {
     renderAll();
   } catch (e) { flash(e.message, false); }
 }
-function renderAll() { loadBotStart(); loadThanksCert(); loadChals(); renderPacks(); renderCertText(); renderUsers(); renderRemind(); renderAd(); renderStats(); renderWords(); renderPlan(); renderGames(); renderWheel(); renderPool(); renderLeague(); renderCerts(); renderSettings(); }
+function renderAll() { loadBotStart(); loadThanksCert(); loadChals(); renderPacks(); if ($('ch_pack') && !chEditId) chFillPacks($('ch_pack').value); renderCertText(); renderUsers(); renderRemind(); renderAd(); renderStats(); renderWords(); renderPlan(); renderGames(); renderWheel(); renderPool(); renderLeague(); renderCerts(); renderSettings(); }
 const dailyFor = d => (data.config.daily || {})[d] || {};
 
 /* ---------- umumiy ---------- */
@@ -688,35 +693,96 @@ let chals = [], chEditId = null;
 const msFromInput = v => v ? Date.parse(v + ':00+05:00') : 0;
 const inputFromMs = ms => ms ? new Date(ms + 5 * 3600 * 1000).toISOString().slice(0, 16) : '';
 const CH_M = { xp: 'XP', words: "Yangi so'z", mastered: 'Yodlash' };
+const CH_K = { metric: 'XP / so\'z', themed: 'Mavzuli', survival: 'Marafon' };
+const CH_CERTS = [
+  ['gold', '🥇 1-o\'rin — Oltin', '{challenge} — {place}-o\'rin', 'Masalan: Eng ko\'p so\'z yodlagan g\'olib'],
+  ['silver', '🥈 2-o\'rin — Kumush', '{challenge} — {place}-o\'rin', ''],
+  ['bronze', '🥉 3-o\'rin — Bronza', '{challenge} — {place}-o\'rin', ''],
+  ['marathon', '🏃 Maqsadga erishganlar — Marafon', '{challenge} — maqsadga erishdi', 'Belgilangan maqsad: {goal}. Natijangiz: {score}'],
+  ['thanks', '💜 Qolgan ishtirokchilar — Minnatdorchilik', '{challenge} ishtirokchisi', 'Ishtirokingiz uchun rahmat!'],
+];
+function chBuildCertBox() {
+  $('chCertBox').innerHTML = CH_CERTS.map(([k, label, phT, phR]) => `<div style="border:1px solid var(--line,#2a3550);border-radius:12px;padding:10px;margin-bottom:8px"><b>${label}</b><div class="f3"><div><label>Sarlavha</label><input id="chc_${k}_t" maxlength="100" placeholder="${esc(phT)}" /></div><div style="grid-column:span 2"><label>Izoh</label><input id="chc_${k}_r" maxlength="200" placeholder="${esc(phR)}" /></div></div></div>`).join('');
+}
+function chKindUi() {
+  const k = $('ch_kind').value;
+  $('ch_metricBox').classList.toggle('hide', k !== 'metric');
+  $('ch_packBox').classList.toggle('hide', k !== 'themed');
+  $('ch_livesBox').classList.toggle('hide', k !== 'survival');
+  $('ch_goalLbl').textContent = k === 'survival' ? "Maqsad: nechta so'z topilsa Marafon sertifikati (ixtiyoriy)" : k === 'themed' ? 'Maqsad: nechta ball (ixtiyoriy)' : 'Maqsad (ixtiyoriy, son)';
+}
+function chFillPacks(sel) {
+  const list = (packs || []).filter(p => p.kind === 'open' || true);
+  $('ch_pack').innerHTML = '<option value="">— to\'plamni tanlang —</option>' + list.map(p => `<option value="${esc(p.id)}">${esc(p.title)} (${p.count} so'z)</option>`).join('');
+  if (sel) $('ch_pack').value = sel;
+}
 function chReset() {
   chEditId = null; $('chEdTitle').textContent = 'Yangi chellenj';
   ['ch_title','ch_desc','ch_prize'].forEach(i => $(i).value = '');
-  $('ch_metric').value = 'xp'; $('ch_goal').value = 0; $('ch_top').value = 3; $('ch_xp').value = 0; $('ch_fin').checked = false; $('ch_pub').checked = true;
+  $('ch_kind').value = 'metric'; $('ch_metric').value = 'xp'; $('ch_goal').value = 0; $('ch_lives').value = 3; $('ch_xp').value = 0; $('ch_pub').checked = true;
+  chBuildCertBox(); chFillPacks(''); chKindUi();
   const n = Date.now(); $('ch_start').value = inputFromMs(n); $('ch_end').value = inputFromMs(n + 7 * 86400000);
 }
 async function loadChals() { try { const r = await api('listChallenges'); chals = r.items || []; renderChals(); } catch (e) { flash(e.message, false); } }
+async function sendChallengeCerts(id, title) {
+  const box = $('chSendBox'); box.classList.remove('hide');
+  const r = await api('challengeCerts', { id });
+  const todo = (r.items || []).filter(x => x.tg && !x.sent);
+  if (!todo.length) { box.textContent = 'Yuboriladigan sertifikat yo\'q (hammasi yuborilgan yoki Telegram hisobi emas).'; return; }
+  let ok = 0, fail = 0;
+  for (let i = 0; i < todo.length; i++) {
+    const c = todo[i];
+    box.textContent = `«${title}»: sertifikatlar Telegramga yuborilmoqda… ${i + 1} / ${todo.length} (sahifani yopmang)`;
+    try {
+      const image = await VBC.certificateBase64({ id: c.id, tpl: c.tpl, title: c.title, reason: c.reason, name: c.name, date: c.date, special: false });
+      const d = await api('deliverCert', { userId: c.uid, id: c.id, image });
+      if (d.ok) ok++; else fail++;
+    } catch (e) { fail++; }
+    await new Promise(res => setTimeout(res, 120));
+  }
+  box.textContent = `Tayyor ✅ ${ok} ta sertifikat yuborildi${fail ? `, ${fail} ta yuborilmadi (foydalanuvchi botga Start bosmagan bo'lishi mumkin — ilovani ochganda sertifikat o'zi keladi)` : ''}.`;
+}
 function renderChals() {
   $('chCount').textContent = `(${chals.length})`;
   const now = Date.now();
-  $('chBody').innerHTML = chals.map(c => { const st = c.finalized ? 'yakunlangan' : now < c.startsAt ? 'kutilmoqda' : now < c.endsAt ? 'davom etmoqda' : 'tugagan (yakunlang)'; return `<tr><td><b>${esc(c.title)}</b><br><span class="small">${esc(c.prize||'')}</span></td><td>${esc(CH_M[c.metric]||c.metric)}${c.goal ? ' · maqsad ' + c.goal : ''}</td><td class="small">${esc(inputFromMs(c.startsAt).replace('T',' '))}<br>${esc(inputFromMs(c.endsAt).replace('T',' '))}</td><td>${c.players}</td><td><span class="tag ${c.finalized ? 'h' : ''}">${st}</span>${c.published === false ? ' <span class="tag h">yashirin</span>' : ''}</td><td><div class="acts">${c.finalized ? '' : `<button class="sec" data-ca="edit" data-id="${esc(c.id)}">Tahrirlash</button><button data-ca="fin" data-id="${esc(c.id)}">Yakunlash 🏆</button>`}<button class="bad" data-ca="del" data-id="${esc(c.id)}">O'chirish</button></div></td></tr>`; }).join('') || '<tr><td colspan="6" class="small">Hali chellenj yo\'q</td></tr>';
+  $('chBody').innerHTML = chals.map(c => {
+    const st = c.finalized ? 'yakunlangan' : now < c.startsAt ? 'kutilmoqda' : now < c.endsAt ? 'davom etmoqda' : 'tugagan (yakunlang)';
+    const k = c.kind || 'metric';
+    const detail = k === 'survival' ? `${c.lives || 3} jon` + (c.goal ? ' · maqsad ' + c.goal : '') : k === 'themed' ? 'to\'plam' + (c.goal ? ' · maqsad ' + c.goal : '') : (CH_M[c.metric] || c.metric) + (c.goal ? ' · maqsad ' + c.goal : '');
+    return `<tr><td><b>${esc(c.title)}</b><br><span class="small">${esc(c.prize||'')}</span></td><td>${esc(CH_K[k])}<br><span class="small">${esc(detail)}</span></td><td class="small">${esc(inputFromMs(c.startsAt).replace('T',' '))}<br>${esc(inputFromMs(c.endsAt).replace('T',' '))}</td><td>${c.players}</td><td><span class="tag ${c.finalized ? 'h' : ''}">${st}</span>${c.published === false ? ' <span class="tag h">yashirin</span>' : ''}</td><td><div class="acts">${c.finalized ? `<button data-ca="send" data-id="${esc(c.id)}">📨 Telegramga yuborish</button>` : `<button class="sec" data-ca="edit" data-id="${esc(c.id)}">Tahrirlash</button><button data-ca="fin" data-id="${esc(c.id)}">Yakunlash 🏆</button>`}<button class="bad" data-ca="del" data-id="${esc(c.id)}">O'chirish</button></div></td></tr>`;
+  }).join('') || '<tr><td colspan="6" class="small">Hali chellenj yo\'q</td></tr>';
   $('chBody').querySelectorAll('button').forEach(b => b.onclick = guard(async () => {
     const id = b.dataset.id, c = chals.find(x => x.id === id), a = b.dataset.ca;
     if (a === 'del') { if (!confirm(`«${c.title}» o'chirilsinmi? Ishtirokchilar natijasi ham yo'qoladi.`)) return; await api('deleteChallenge', { id }); flash("O'chirildi"); return loadChals(); }
-    if (a === 'fin') { if (!confirm(`«${c.title}» yakunlansinmi? Natijalar qotadi, g'oliblarga sertifikat/XP beriladi. Bu amalni qaytarib bo'lmaydi.`)) return; const r = await api('finalizeChallenge', { id }); flash(`Yakunlandi ✅ ${r.players} ishtirokchi, ${r.awarded} ta sertifikat berildi`); return loadChals(); }
+    if (a === 'send') return sendChallengeCerts(id, c.title);
+    if (a === 'fin') {
+      if (!confirm(`«${c.title}» yakunlansinmi?\n\nNatijalar qotadi va HAR BIR ishtirokchiga o'z o'rniga qarab sertifikat beriladi (Oltin / Kumush / Bronza / Marafon / Minnatdorchilik). Keyin sertifikatlar Telegramga yuboriladi. Bu amalni qaytarib bo'lmaydi.`)) return;
+      b.disabled = true; flash('Yakunlanmoqda… biroz kuting');
+      const r = await api('finalizeChallenge', { id });
+      flash(`Yakunlandi ✅ ${r.players} ishtirokchi, ${r.awarded} ta sertifikat berildi. Endi Telegramga yuboriladi…`);
+      await loadChals();
+      return sendChallengeCerts(id, c.title);
+    }
     if (a === 'edit') {
       chEditId = id; $('chEdTitle').textContent = 'Tahrirlash: ' + c.title;
-      $('ch_title').value = c.title || ''; $('ch_desc').value = c.desc || ''; $('ch_prize').value = c.prize || ''; $('ch_metric').value = c.metric || 'xp'; $('ch_goal').value = c.goal || 0;
-      $('ch_start').value = inputFromMs(c.startsAt); $('ch_end').value = inputFromMs(c.endsAt); $('ch_top').value = c.topCount ?? 3; $('ch_xp').value = c.xpTop || 0; $('ch_fin').checked = !!c.certFinishers; $('ch_pub').checked = c.published !== false;
+      $('ch_title').value = c.title || ''; $('ch_desc').value = c.desc || ''; $('ch_prize').value = c.prize || ''; $('ch_kind').value = c.kind || 'metric'; $('ch_metric').value = c.metric || 'xp'; $('ch_goal').value = c.goal || 0; $('ch_lives').value = c.lives || 3;
+      chFillPacks(c.packId || ''); chKindUi();
+      $('ch_start').value = inputFromMs(c.startsAt); $('ch_end').value = inputFromMs(c.endsAt); $('ch_xp').value = c.xpTop || 0; $('ch_pub').checked = c.published !== false;
+      chBuildCertBox(); const ct = c.certs || {}; CH_CERTS.forEach(([k]) => { $(`chc_${k}_t`).value = (ct[k] || {}).title || ''; $(`chc_${k}_r`).value = (ct[k] || {}).reason || ''; });
       window.scrollTo({ top: $('chEdTitle').offsetTop - 60, behavior: 'smooth' });
     }
   }));
 }
+$('ch_kind').onchange = chKindUi;
 $('chNew').onclick = chReset;
 $('chSave').onclick = guard(async () => {
   const title = $('ch_title').value.trim(); if (!title) return flash('Nomini kiriting', false);
   const startsAt = msFromInput($('ch_start').value), endsAt = msFromInput($('ch_end').value);
   if (!startsAt || !endsAt || endsAt <= startsAt) return flash("Boshlanish va tugash vaqtini to'g'ri kiriting", false);
-  await api('saveChallenge', { id: chEditId, title, desc: $('ch_desc').value, prize: $('ch_prize').value, metric: $('ch_metric').value, goal: +$('ch_goal').value || 0, startsAt, endsAt, topCount: +$('ch_top').value || 0, xpTop: +$('ch_xp').value || 0, certFinishers: $('ch_fin').checked, published: $('ch_pub').checked });
+  const kind = $('ch_kind').value;
+  if (kind === 'themed' && !$('ch_pack').value) return flash("Mavzuli chellenj uchun lug'at to'plamini tanlang", false);
+  const certs = {}; CH_CERTS.forEach(([k]) => certs[k] = { title: $(`chc_${k}_t`).value, reason: $(`chc_${k}_r`).value });
+  await api('saveChallenge', { id: chEditId, title, kind, packId: $('ch_pack').value, lives: +$('ch_lives').value || 3, desc: $('ch_desc').value, prize: $('ch_prize').value, metric: $('ch_metric').value, goal: +$('ch_goal').value || 0, startsAt, endsAt, xpTop: +$('ch_xp').value || 0, certs, published: $('ch_pub').checked });
   flash('Saqlandi ✅'); chReset(); await loadChals();
 });
 chReset();

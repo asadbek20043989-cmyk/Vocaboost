@@ -40,7 +40,7 @@ type TabId = 'home' | 'words' | 'games' | 'leaderboard';
 export type StreakPopupData =
   | { kind: 'gain'; streak: number; saved: boolean }
   | { kind: 'frozen'; streak: number; savers: number };
-export type Overlay = null | { type: 'learn'; packId?: string } | { type: 'game'; id: string };
+export type Overlay = null | { type: 'learn'; packId?: string } | { type: 'game'; id: string } | { type: 'survival'; id: string };
 
 export interface Settings {
   reviewCap: number;
@@ -110,6 +110,9 @@ interface AppContextType {
   // chellenj / marafonlar (admin o'tkazadi)
   challenges: Challenge[];
   joinChallenge: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  openSurvival: (id: string) => Promise<{ ok: boolean; error?: string }>; // Marafon: urinishni boshlaydi (faqat 1 marta)
+  saveSurvival: (id: string, score: number, done: boolean, keepalive?: boolean) => void;
+  allWords: BankWord[]; // barcha darajadagi so'zlar (Marafon uchun adolatli umumiy to'plam)
   introduceWord: (w: BankWord, correct: boolean) => number;
   reviewWord: (w: BankWord, correct: boolean) => number;
   // Learning.tsx bilan moslik
@@ -902,10 +905,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } else if (g.type === 'xp' && amount > 0) {
           setProfile(p => ({ ...p, xp: p.xp + amount }));
           pushNotice(`💎 Admin sizga +${amount} XP sovg'a qildi`);
-        } else if (g.type === 'xpset') {
-          setProfile(p => ({ ...p, xp: amount, xpSets: Array.from(new Set([...(p.xpSets || []), g.id])), updatedAt: nowMs() }));
-          pushNotice(`💎 XP balansingiz ${amount} ga o'rnatildi`);
         }
+        // Eski «xpset» sovg'alari endi qo'llanmaydi: admin XP o'zgartirishi Liga yozuvidagi `adj` orqali (farq sifatida) ishlaydi.
       });
       if (list.length) setGrantsDone(prev => Array.from(new Set([...prev, ...list.map(g => g.id)])));
       setGrantsReady(true);
@@ -943,6 +944,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setProfile(p => ({ ...p, xp: nx, xpSets: Array.from(new Set([...(p.xpSets || []), `lg${off}_${nx}`])), updatedAt: nowMs() }));
     patch(`leaderboard/${myId.current}`, { xp: nx, xpOffset: 0 });
   }, [leagueRaw, syncReady, grantsReady, profile.hasCompletedOnboarding]);
+
+  // Admin XP ni o'zgartirsa (Liga yozuvidagi `adj` / `adjV`), shu FARQ foydalanuvchining o'z XP siga bir marta qo'shiladi.
+  // Shundan keyin foydalanuvchi yig'gan XP admin qo'ygan qiymatning ustiga qo'shiladi (grant/qurilma holatiga bog'liq emas).
+  useEffect(() => {
+    if (!realtimeEnabled || !syncReady || !profile.hasCompletedOnboarding) return;
+    const self = leagueRaw?.[myId.current];
+    if (!self) return;
+    const v = Number(self.adjV) || 0;
+    if (v <= (profile.adjV || 0)) return;
+    const adj = Number(self.adj) || 0;
+    const delta = adj - (profile.adjApplied || 0);
+    setProfile(p => (v <= (p.adjV || 0) ? p : { ...p, xp: Math.max(0, p.xp + delta), adjV: v, adjApplied: adj, updatedAt: nowMs() }));
+  }, [leagueRaw, syncReady, profile.hasCompletedOnboarding, profile.adjV]);
 
   const applyXpMultiplier = (amount: number): number => {
     if (!wheel.doubleXpPending || amount <= 0) return amount;
@@ -1044,8 +1058,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!ok) lbLastSig.current = '';
     });
   };
+  // Reytingga yozishdan oldin Liga yozuvi yuklanishini kutamiz (admin XP tuzatishi eski XP bilan ustidan yozilib ketmasin)
+  const [lbGate, setLbGate] = useState(false);
   useEffect(() => {
-    if (!realtimeEnabled || !profile.hasCompletedOnboarding || !syncReady || !grantsReady) return;
+    if (leagueRaw !== null) setLbGate(true);
+  }, [leagueRaw]);
+  useEffect(() => {
+    const t = setTimeout(() => setLbGate(true), 10000);
+    return () => clearTimeout(t);
+  }, []);
+  useEffect(() => {
+    if (!realtimeEnabled || !profile.hasCompletedOnboarding || !syncReady || !grantsReady || !lbGate) return;
+    // Admin XP tuzatishi hali qo'llanmagan bo'lsa, eski XP ni yubormaymiz (yuqoridagi effekt avval qo'llaydi)
+    const selfLb = leagueRaw?.[myId.current];
+    if (selfLb && (Number(selfLb.adjV) || 0) > (profile.adjV || 0)) return;
     lbPayload.current = {
       name: profile.name,
       avatar: profile.avatar.startsWith('data:') && profile.avatar.length > 1500 ? '' : profile.avatar,
@@ -1063,7 +1089,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ts: 0,
     };
     if (!lbTimer.current) lbTimer.current = setTimeout(() => flushLb(), lbLastSig.current ? LB_THROTTLE_MS : 2000);
-  }, [profile.xp, profile.name, profile.avatar, profile.streak, profile.level, profile.wordsPerDay, profile.username, profile.joinedAt, profile.lastReadDate, wheel.streakSavers, profile.hasCompletedOnboarding, savedWords.length, masteredCount, syncReady, grantsReady]);
+  }, [profile.xp, profile.name, profile.avatar, profile.streak, profile.level, profile.wordsPerDay, profile.username, profile.joinedAt, profile.lastReadDate, wheel.streakSavers, profile.hasCompletedOnboarding, savedWords.length, masteredCount, syncReady, grantsReady, lbGate, leagueRaw, profile.adjV]);
   useEffect(() => {
     const onHide = () => document.visibilityState === 'hidden' && flushLb(true);
     const onPageHide = () => flushLb(true);
@@ -1191,7 +1217,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     .map(([id, c]: [string, any]) => ({
       id, tpl: String(c.tpl || 'gold'), title: String(c.title || 'Maxsus sertifikat'),
       reason: c.reason ? String(c.reason) : undefined, name: String(c.name || profile.name),
-      date: String(c.date || '').slice(0, 10), special: !c.auto, verified: true,
+      date: String(c.date || '').slice(0, 10), special: !c.auto, verified: true, delivered: !!c.sent,
     }));
   const certificates = [...cloudCerts, ...localCerts].sort((a, b) => (a.date < b.date ? 1 : -1));
 
@@ -1275,7 +1301,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     if (!canUseBot() || !syncReady || !profile.hasCompletedOnboarding || certSending.current) return;
     const sent = new Set(profile.sentCerts || []);
-    const next = certificates.find(c => !sent.has(c.id) && !certFailed.current.has(c.id));
+    const next = certificates.find(c => !c.delivered && !sent.has(c.id) && !certFailed.current.has(c.id));
     if (!next) return;
     certSending.current = true;
     (async () => {
@@ -1486,27 +1512,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return subscribe('challenges', v => setChallengesRaw(v || {}), setChallengesLive);
   }, []);
 
+  // Mavzuli chellenj: to'plamdagi so'zlar bo'yicha ball (o'rganilgan so'z — 1 ball, yodlangan so'z — yana +1 ball)
+  const packScore = (packId: string): number => {
+    const p = packs.find(x => x.id === packId);
+    if (!p) return 0;
+    return p.words.reduce((n, w) => n + (srs[w.id] || learnedEn.has(w.en.toLowerCase()) ? 1 : 0) + (srs[w.id]?.mastered ? 1 : 0), 0);
+  };
+
   const challenges: Challenge[] = Object.entries(challengesRaw)
     .filter(([, c]: [string, any]) => c?.meta && c.meta.published !== false)
     .map(([id, c]: [string, any]) => {
       const m = c.meta;
+      const kind = (['themed', 'survival'].includes(m.kind) ? m.kind : 'metric') as Challenge['kind'];
       const metric = (['xp', 'words', 'mastered'].includes(m.metric) ? m.metric : 'xp') as DuelMetric;
       const endsAt = Number(m.endsAt) || 0;
       const ended = nowMs() >= endsAt;
+      const pack = kind === 'themed' ? packs.find(x => x.id === m.packId) : undefined;
       const players: DuelPlayer[] = Object.entries(c.players || {})
         .filter(([, p]) => p)
         .map(([uid, p]: [string, any]) => {
-          const base = { xp: Number(p.base?.xp) || 0, words: Number(p.base?.words) || 0, mastered: Number(p.base?.mastered) || 0 };
+          const base = { xp: Number(p.base?.xp) || 0, words: Number(p.base?.words) || 0, mastered: Number(p.base?.mastered) || 0, pack: Number(p.base?.pack) || 0 };
           const stored = Math.max(0, Number(p.gain) || 0);
-          const lv = ended ? null : liveValue(uid, metric);
+          let lv: number | null = null;
+          if (!ended) {
+            if (kind === 'metric') {
+              const v = liveValue(uid, metric);
+              lv = v === null ? null : Math.max(0, v - base[metric]);
+            } else if (kind === 'themed' && uid === myId.current) lv = Math.max(0, packScore(m.packId) - base.pack);
+          }
           return {
             id: uid,
             name: uid === myId.current ? profile.name : String(p.name || leagueRaw?.[uid]?.name || "O'quvchi"),
             avatar: uid === myId.current ? shortAvatar || String(p.avatar || '') : String(p.avatar || leagueRaw?.[uid]?.avatar || ''),
-            gain: Math.max(stored, lv === null ? 0 : Math.max(0, lv - base[metric])),
+            gain: Math.max(stored, lv === null ? 0 : lv),
             joinedAt: Number(p.joinedAt) || 0,
             ts: Number(p.ts) || 0,
             base,
+            started: Number(p.started) || 0,
+            done: !!p.done,
           };
         })
         .sort((a, b) => b.gain - a.gain || a.ts - b.ts);
@@ -1515,6 +1558,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id,
         title: String(m.title || 'Chellenj'),
         desc: String(m.desc || ''),
+        kind,
+        packId: String(m.packId || ''),
+        packTitle: pack?.title || '',
+        packTotal: pack?.words.length || 0,
+        lives: Math.max(1, Number(m.lives) || 3),
+        myStarted: !!me?.started,
+        myDone: !!me?.done,
         metric,
         startsAt: Number(m.startsAt) || 0,
         endsAt,
@@ -1528,7 +1578,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     })
     .sort((a, b) => b.startsAt - a.startsAt);
 
-  // Qatnashayotgan chellenjlarda o'z natijamni bazaga yozaman (faqat o'sib boradi)
+  // Qatnashayotgan chellenjlarda o'z natijamni bazaga yozaman (faqat o'sib boradi). Marafon natijasi o'yinning o'zida yoziladi.
   useEffect(() => {
     if (!realtimeEnabled || !syncReady || !profile.hasCompletedOnboarding) return;
     const t = setTimeout(() => {
@@ -1537,16 +1587,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const m = c?.meta;
         const mine = c?.players?.[me];
         const t0 = nowMs();
-        if (!m || !mine || m.finalized || t0 < Number(m.startsAt) || t0 >= Number(m.endsAt)) return;
-        const metric = (['xp', 'words', 'mastered'].includes(m.metric) ? m.metric : 'xp') as DuelMetric;
-        const gain = Math.max(0, duelMetricValue(metric) - (Number(mine.base?.[metric]) || 0));
+        if (!m || !mine || m.finalized || m.kind === 'survival' || t0 < Number(m.startsAt) || t0 >= Number(m.endsAt)) return;
+        let gain: number;
+        if (m.kind === 'themed') gain = Math.max(0, packScore(String(m.packId || '')) - (Number(mine.base?.pack) || 0));
+        else {
+          const metric = (['xp', 'words', 'mastered'].includes(m.metric) ? m.metric : 'xp') as DuelMetric;
+          gain = Math.max(0, duelMetricValue(metric) - (Number(mine.base?.[metric]) || 0));
+        }
         if (gain > (Number(mine.gain) || 0) || mine.name !== profile.name) {
           patch(`challenges/${id}/players/${me}`, { gain: Math.max(gain, Number(mine.gain) || 0), ts: nowMs(), name: profile.name, avatar: shortAvatar });
         }
       });
     }, 8000);
     return () => clearTimeout(t);
-  }, [profile.xp, savedWords.length, masteredCount, profile.name, shortAvatar, challengesRaw, syncReady, now]);
+  }, [profile.xp, savedWords.length, masteredCount, profile.name, shortAvatar, challengesRaw, syncReady, now, srs, packs]);
 
   const joinChallenge = async (id: string): Promise<{ ok: boolean; error?: string }> => {
     const c = challengesRaw[id];
@@ -1554,6 +1608,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (c.meta.finalized || nowMs() >= Number(c.meta.endsAt)) return { ok: false, error: 'Chellenj tugagan' };
     if (c.players?.[myId.current]) return { ok: true };
     const me = myPlayer();
+    if (c.meta.kind === 'themed') (me.base as any).pack = packScore(String(c.meta.packId || ''));
     // So'rov vaqt chegarasiga ega (qotib qolmaydi); ulanish yo'q bo'lsa 2 marta qayta uriniladi
     let ok = await put(`challenges/${id}/players/${myId.current}`, me);
     if (!ok) ok = await put(`challenges/${id}/players/${myId.current}`, me);
@@ -1571,6 +1626,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
       .catch(() => {});
     return { ok: true };
+  };
+
+  // Marafon (3 jon): har bir foydalanuvchiga FAQAT 1 ta urinish. Boshlashdan oldin bazadagi eng yangi holat tekshiriladi.
+  const openSurvival = async (id: string): Promise<{ ok: boolean; error?: string }> => {
+    const c = challengesRaw[id];
+    if (!c?.meta || c.meta.kind !== 'survival') return { ok: false, error: 'Marafon topilmadi' };
+    const t0 = nowMs();
+    if (c.meta.finalized || t0 >= Number(c.meta.endsAt)) return { ok: false, error: 'Marafon tugagan' };
+    if (t0 < Number(c.meta.startsAt)) return { ok: false, error: 'Marafon hali boshlanmagan' };
+    const fresh = await getJson(`challenges/${id}/players/${myId.current}`).catch(() => null);
+    if (fresh && fresh.started) return { ok: false, error: 'Siz bu marafonda allaqachon urindingiz. Har kimga faqat 1 ta imkoniyat beriladi.' };
+    const base = { name: profile.name, avatar: shortAvatar, gain: 0, started: nowMs(), done: false, ts: nowMs() };
+    const ok = await patch(`challenges/${id}/players/${myId.current}`, fresh ? base : { ...base, joinedAt: nowMs(), base: { xp: profile.xp, words: savedWords.length, mastered: masteredCount } });
+    if (!ok) return { ok: false, error: 'Boshlab bo‘lmadi. Internetni tekshirib, qayta urinib ko‘ring' };
+    setChallengesRaw(prev => ({ ...prev, [id]: { ...(prev[id] || {}), players: { ...((prev[id] || {}).players || {}), [myId.current]: { ...(((prev[id] || {}).players || {})[myId.current] || {}), ...base } } } }));
+    try { sessionStorage.setItem('vb_liga_sub', 'challenge'); } catch { /* ignore */ }
+    setOverlay({ type: 'survival', id });
+    return { ok: true };
+  };
+  const saveSurvival = (id: string, score: number, done: boolean, keepalive = false) => {
+    const data = { gain: Math.max(0, Math.round(score)), done, ts: nowMs() };
+    patch(`challenges/${id}/players/${myId.current}`, data, keepalive);
+    setChallengesRaw(prev => ({ ...prev, [id]: { ...(prev[id] || {}), players: { ...((prev[id] || {}).players || {}), [myId.current]: { ...(((prev[id] || {}).players || {})[myId.current] || {}), ...data } } } }));
   };
 
   // Taklif havolasi: Telegram `startapp=duel_KOD` yoki `?duel=KOD`
@@ -1641,7 +1719,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Yangi "davr" (epoch): boshqa qurilmalar eski ma'lumotni qaytarib yubora olmaydi, ular ham tozalanadi
     oldSrsKey.current = srsKey(epoch);
     setEpoch(Math.max(nowMs(), epoch + 1));
-    setProfile({ ...freshProfile(), updatedAt: nowMs() });
+    const selfLb = leagueRaw?.[myId.current];
+    setProfile({ ...freshProfile(), adjV: Number(selfLb?.adjV) || 0, adjApplied: Number(selfLb?.adj) || 0, updatedAt: nowMs() });
     // Liga ham darhol nolga tushadi (ro'yxatdan o'tish tugamaguncha eski natija ko'rinib turmasin)
     patch(`leaderboard/${myId.current}`, { xp: 0, xpOffset: 0, streak: 0, learned: 0, mastered: 0, ts: nowMs() });
     setSrs({});
@@ -1664,7 +1743,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       value={{
         profile, bank, bankFromCloud, srs, savedWords, masteredCount, dueWords, newQueue, introducedToday,
         dailyQuests, badges, games, settings, activeTab, setActiveTab, overlay, openLearn, openGame, closeOverlay,
-        goBack, canGoBack, packs, todayPacks, packProgress, customPacks, saveCustomPack, deleteCustomPack, duels, createDuel, joinDuel, leaveDuel, pendingDuelCode, clearPendingDuel: () => setPendingDuelCode(''), duelMetricValue, challenges, joinChallenge, introduceWord, reviewWord, addWord, isWordSaved, markWordReviewed, claimDailyBonus, completeGame, updateProfile, finishOnboarding,
+        goBack, canGoBack, packs, todayPacks, packProgress, customPacks, saveCustomPack, deleteCustomPack, duels, createDuel, joinDuel, leaveDuel, pendingDuelCode, clearPendingDuel: () => setPendingDuelCode(''), duelMetricValue, challenges, joinChallenge, openSurvival, saveSurvival, allWords: mainBank, introduceWord, reviewWord, addWord, isWordSaved, markWordReviewed, claimDailyBonus, completeGame, updateProfile, finishOnboarding,
         resetProgress, claimQuest, wheel: w, wheelPrizes: wheelCfg.prizes, wheelFreeSpins: wheelCfg.freeSpins,
         freeSpinsLeft, totalSpinsLeft, isPro, spinWheel, applyPrize, grantReferralSpin, leagueUsers, leagueLive, challengesLive,
         realtimeOn: realtimeEnabled, announcement, certificates, certificateView, showCertificate: setCertificateView,

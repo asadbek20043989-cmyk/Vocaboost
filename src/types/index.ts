@@ -91,6 +91,7 @@ export interface Certificate {
   name: string;
   date: string; // YYYY-MM-DD
   special: boolean; // admin yuborgan
+  delivered?: boolean; // admin paneldan Telegram chatiga allaqachon yuborilgan
 }
 
 export interface UserProfile {
@@ -121,7 +122,9 @@ export interface UserProfile {
   joinedAt?: string; // ilovaga birinchi kirgan kun (YYYY-MM-DD)
   sentCerts?: string[]; // botga allaqachon yuborilgan sertifikatlar
   botRemind?: boolean; // bot orqali kunlik eslatma (standart: yoqilgan)
-  xpSets?: string[]; // admin tomonidan XP o'rnatilgan (bir martalik) amallar ID lari
+  xpSets?: string[]; // (eski) admin XP o'rnatgan bir martalik amallar ID lari
+  adjV?: number; // admin XP tuzatishining qo'llangan versiyasi (Liga yozuvidagi `adjV` bilan solishtiriladi)
+  adjApplied?: number; // admin tuzatishlarining shu hisobga qo'llangan umumiy yig'indisi
   updatedAt?: number; // sozlamalar (ism, daraja, ...) oxirgi o'zgargan vaqt — qurilmalar o'rtasida birlashtirish uchun
   customPacks?: CustomWordPack[]; // Foydalanuvchining shaxsiy lug'at to'plamlari
 }
@@ -150,7 +153,9 @@ export interface DuelPlayer {
   gain: number; // bellashuv boshlanganidan beri to'plangan natija
   joinedAt: number;
   ts: number;
-  base: { xp: number; words: number; mastered: number };
+  base: { xp: number; words: number; mastered: number; pack?: number };
+  started?: number; // Marafon (3 jon): urinish boshlangan vaqt (har kimga faqat 1 ta urinish)
+  done?: boolean; // Marafon: urinish tugagan
 }
 
 export interface Duel {
@@ -186,11 +191,20 @@ export interface CustomWordPack {
   words: BankWord[];
 }
 
+export type ChallengeKind = 'metric' | 'themed' | 'survival';
+
 /** Admin o'tkazadigan chellenj / marafon */
 export interface Challenge {
   id: string;
   title: string;
   desc: string;
+  kind: ChallengeKind; // metric — XP/so'z; themed — mavzuli to'plam; survival — Marafon (3 jon)
+  packId: string; // themed: lug'at to'plami ID si
+  packTitle: string;
+  packTotal: number;
+  lives: number; // survival: jonlar soni
+  myStarted: boolean;
+  myDone: boolean;
   metric: DuelMetric;
   startsAt: number;
   endsAt: number;

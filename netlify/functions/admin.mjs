@@ -94,10 +94,13 @@ export const handler = async event => {
         if (typeof patch.hidden === 'boolean') upd.hidden = patch.hidden;
         if (typeof patch.deleted === 'boolean') upd.deleted = patch.deleted;
         if (patch.xp !== undefined) {
-          // Yangi XP foydalanuvchining o'z hisobiga ham yoziladi (bir martalik "xpset" sovg'asi): shundan keyin
-          // u yig'gan XP Ligada darhol ko'rinadi. Liga qiymati ham hozirning o'zida yangilanadi.
+          // XP «farq» (adj) sifatida yoziladi: foydalanuvchi ilovasi shu farqni o'z XP siga BIR MARTA qo'shadi.
+          // Shundan keyin u yig'gan XP admin qo'ygan qiymatning ustiga qo'shiladi. Liga qiymati darhol yangilanadi.
           const want = Math.max(0, Math.min(10000000, Math.round(Number(patch.xp))));
-          await call('PUT', `grants/${id}/${newGid()}`, { type: 'xpset', amount: want, note: 'Admin XP ni o\'zgartirdi', ts: Date.now() });
+          const cur = (await call('GET', `leaderboard/${id}`)) || {};
+          const shown = Math.max(0, (Number(cur.xp) || 0) + (Number(cur.xpOffset) || 0));
+          upd.adj = (Number(cur.adj) || 0) + (want - shown);
+          upd.adjV = (Number(cur.adjV) || 0) + 1;
           upd.xp = want;
           upd.xpOffset = 0;
         }
@@ -115,17 +118,15 @@ export const handler = async event => {
       case 'resetLeague': {
         const lb = (await call('GET', 'leaderboard')) || {};
         const upd = {};
-        const gr = {};
-        for (const id of Object.keys(lb)) {
+        for (const [id, e] of Object.entries(lb)) {
+          const shown = Math.max(0, (Number(e?.xp) || 0) + (Number(e?.xpOffset) || 0));
           upd[`${id}/xp`] = 0; // hamma uchun XP 0 dan boshlanadi
           upd[`${id}/xpOffset`] = 0;
-          gr[`${id}/${newGid()}`] = { type: 'xpset', amount: 0, note: 'Yangi mavsum', ts: Date.now() };
+          upd[`${id}/adj`] = (Number(e?.adj) || 0) - shown; // foydalanuvchining o'z hisobi ham 0 dan boshlanadi (farq sifatida)
+          upd[`${id}/adjV`] = (Number(e?.adjV) || 0) + 1;
         }
-        if (Object.keys(upd).length) {
-          await call('PATCH', 'leaderboard', upd);
-          await call('PATCH', 'grants', gr); // foydalanuvchining o'z hisobi ham 0 dan boshlanadi
-        }
-        return json(200, { ok: true, count: Object.keys(upd).length / 2 });
+        if (Object.keys(upd).length) await call('PATCH', 'leaderboard', upd);
+        return json(200, { ok: true, count: Object.keys(upd).length / 4 });
       }
 
       case 'setDaily': {
@@ -529,6 +530,7 @@ export const handler = async event => {
         const str = (v, n) => String(v ?? '').trim().slice(0, n);
         const title = str(body.title, 80);
         if (!title) return json(400, { error: 'Chellenj nomini kiriting' });
+        const kind = ['metric', 'themed', 'survival'].includes(body.kind) ? body.kind : 'metric';
         const metric = ['xp', 'words', 'mastered'].includes(body.metric) ? body.metric : 'xp';
         const startsAt = Number(body.startsAt), endsAt = Number(body.endsAt);
         if (!(startsAt > 0) || !(endsAt > startsAt)) return json(400, { error: 'Boshlanish va tugash vaqtini to\'g\'ri kiriting' });
@@ -536,10 +538,24 @@ export const handler = async event => {
         const prev = (await call('GET', `challenges/${id}/meta`)) || {};
         if (prev.finalized) return json(400, { error: 'Yakunlangan chellenjni o\'zgartirib bo\'lmaydi' });
         const num = (v, max) => Math.max(0, Math.min(max, Math.round(Number(v) || 0)));
+        let packId = '';
+        if (kind === 'themed') {
+          packId = ID_RE.test(body.packId || '') ? body.packId : '';
+          if (!packId) return json(400, { error: 'Mavzuli chellenj uchun lug\'at to\'plamini tanlang' });
+          const pk = await call('GET', `packs/${packId}/title`);
+          if (!pk) return json(400, { error: 'Tanlangan to\'plam topilmadi' });
+        }
+        // Yakunda avtomatik beriladigan sertifikatlarning sarlavha va izohi (oldindan yoziladi)
+        const certs = {};
+        const cin = body.certs && typeof body.certs === 'object' ? body.certs : {};
+        for (const k of ['gold', 'silver', 'bronze', 'marathon', 'thanks']) {
+          const x = cin[k] || {};
+          certs[k] = { title: str(x.title, 100), reason: str(x.reason, 200) };
+        }
         const meta = {
-          title, desc: str(body.desc, 400), prize: str(body.prize, 200), metric, startsAt, endsAt,
-          goal: num(body.goal, 1000000), topCount: num(body.topCount ?? 3, 20), xpTop: num(body.xpTop, 5000),
-          certFinishers: !!body.certFinishers, published: body.published !== false, createdAt: prev.createdAt || Date.now(), finalized: false,
+          title, desc: str(body.desc, 400), prize: str(body.prize, 200), kind, metric: kind === 'metric' ? metric : 'xp', startsAt, endsAt,
+          goal: num(body.goal, 1000000), xpTop: num(body.xpTop, 5000), packId, lives: kind === 'survival' ? Math.max(1, num(body.lives || 3, 10)) : 0,
+          certs, published: body.published !== false, createdAt: prev.createdAt || Date.now(), finalized: false,
         };
         await call('PUT', `challenges/${id}/meta`, meta);
         return json(200, { ok: true, id });
@@ -551,43 +567,107 @@ export const handler = async event => {
         return json(200, { ok: true });
       }
 
-      // Yakunlash: natijalar qotiriladi, g'oliblarga sertifikat va XP, maqsadga yetganlarga «Marafon» sertifikati beriladi
+      // Yakunlash: natijalar qotiriladi va HAR BIR ishtirokchiga o'z o'rniga qarab sertifikat beriladi:
+      //   1-o'rin Oltin, 2-o'rin Kumush, 3-o'rin Bronza, maqsadga yetganlarga Marafon, qolganlarga Minnatdorchilik.
+      // Matnlar chellenj yaratilganda admin yozgan (meta.certs). Funksiya qayta chaqirilsa ham sertifikat ikki marta berilmaydi.
       case 'finalizeChallenge': {
         if (!ID_RE.test(body.id || '')) return json(400, { error: 'ID xato' });
         const ch = await call('GET', `challenges/${body.id}`);
         if (!ch?.meta) return json(404, { error: 'Chellenj topilmadi' });
         const m = ch.meta;
         if (m.finalized) return json(400, { error: 'Allaqachon yakunlangan' });
+        const kind = m.kind || 'metric';
         const lb = (await call('GET', 'leaderboard')) || {};
-        const live = (uid, e) => (m.metric === 'xp' ? (Number(e?.xp) || 0) + (Number(e?.xpOffset) || 0) : m.metric === 'words' ? Number(e?.learned) || 0 : Number(e?.mastered) || 0);
-        const rows = Object.entries(ch.players || {}).map(([uid, p]) => {
+        const live = e => (m.metric === 'xp' ? (Number(e?.xp) || 0) + (Number(e?.xpOffset) || 0) : m.metric === 'words' ? Number(e?.learned) || 0 : Number(e?.mastered) || 0);
+        const rows = Object.entries(ch.players || {}).filter(([, p]) => p).map(([uid, p]) => {
+          const stored = Math.max(0, Number(p.gain) || 0);
           const base = Number(p.base?.[m.metric]) || 0;
-          const gain = Math.max(Number(p.gain) || 0, Math.max(0, live(uid, lb[uid]) - base));
+          const gain = kind === 'metric' ? Math.max(stored, Math.max(0, live(lb[uid]) - base)) : stored;
           return { uid, name: String(p.name || lb[uid]?.name || "O'quvchi").slice(0, 40), gain, ts: Number(p.ts) || 0 };
         }).sort((a, b) => b.gain - a.gain || a.ts - b.ts);
-        const PLACE_TPL = ['champion', 'gold', 'silver'];
-        const awarded = [];
-        for (let i = 0; i < rows.length; i++) {
-          const r = rows[i];
-          if (r.gain <= 0) break;
+
+        const goal = Number(m.goal) || 0;
+        const T = m.certs || {};
+        const fill = (s, r, place) => String(s).replace(/\{place\}/g, String(place)).replace(/\{challenge\}/g, m.title).replace(/\{score\}/g, String(r.gain)).replace(/\{goal\}/g, String(goal)).replace(/\{name\}/g, r.name);
+        const DEF = {
+          gold: ['{challenge} — {place}-o\'rin', m.prize || '{score} natija bilan g\'olib bo\'ldi'],
+          silver: ['{challenge} — {place}-o\'rin', m.prize || '{score} natija bilan {place}-o\'rinni egalladi'],
+          bronze: ['{challenge} — {place}-o\'rin', m.prize || '{score} natija bilan {place}-o\'rinni egalladi'],
+          marathon: ['{challenge} — maqsadga erishdi', 'Belgilangan maqsad: {goal}. Natijangiz: {score}'],
+          thanks: ['{challenge} ishtirokchisi', 'Ishtirokingiz uchun rahmat!'],
+        };
+        const issuedMap = (await call('GET', `challenges/${body.id}/certIssued`)) || {};
+        const out = [];
+        const work = rows.map((r, i) => {
           const place = i + 1;
-          const isTop = place <= (m.topCount || 0);
-          const reached = m.goal > 0 && r.gain >= m.goal;
-          if (isTop) {
-            const issued = await issueCertificate(call, { userId: r.uid, tpl: PLACE_TPL[i] || 'bronze', title: `${m.title} — ${place}-o'rin`, reason: m.prize || `${r.gain} natija bilan ${place}-o'rinni egalladi`, name: r.name });
-            r.cert = issued.id;
-            if (m.xpTop > 0) await call('PUT', `grants/${r.uid}/${newGid()}`, { type: 'xp', amount: m.xpTop, validHours: 0, note: `${m.title}: ${place}-o'rin`, ts: Date.now() });
-          } else if (m.certFinishers && reached) {
-            const issued = await issueCertificate(call, { userId: r.uid, tpl: 'marathon', title: `${m.title} — finishchi`, reason: `Maqsadga erishdi: ${m.goal}`, name: r.name });
-            r.cert = issued.id;
+          const key = place <= 3 && r.gain > 0 ? ['gold', 'silver', 'bronze'][i] : goal > 0 && r.gain >= goal ? 'marathon' : 'thanks';
+          return { r, place, key };
+        });
+        const doOne = async ({ r, place, key }) => {
+          const done = issuedMap[r.uid];
+          if (done?.id) return out.push({ uid: r.uid, place, tpl: done.tpl, id: done.id, reused: true });
+          const t = T[key] || {};
+          const title = fill(t.title || DEF[key][0], r, place).slice(0, 100);
+          const reason = fill(t.reason || DEF[key][1], r, place).slice(0, 200);
+          const issued = await issueCertificate(call, { userId: r.uid, tpl: key === 'marathon' ? 'marathon' : key === 'thanks' ? 'thanks' : key, title, reason, name: r.name });
+          await call('PUT', `challenges/${body.id}/certIssued/${r.uid}`, { id: issued.id, tpl: key });
+          if (place <= 3 && key !== 'marathon' && key !== 'thanks' && m.xpTop > 0) {
+            await call('PUT', `grants/${r.uid}/${newGid()}`, { type: 'xp', amount: m.xpTop, validHours: 0, note: `${m.title}: ${place}-o'rin`, ts: Date.now() });
           }
-          awarded.push(r);
-        }
+          out.push({ uid: r.uid, place, tpl: key, id: issued.id });
+        };
+        for (let i = 0; i < work.length; i += 6) await Promise.all(work.slice(i, i + 6).map(doOne));
+        const byUid = Object.fromEntries(out.map(o => [o.uid, o]));
         await call('PATCH', `challenges/${body.id}/meta`, {
           finalized: true, finalizedAt: Date.now(),
-          result: rows.slice(0, 20).map(r => ({ uid: r.uid, name: r.name, gain: r.gain, cert: r.cert || '' })),
+          result: rows.slice(0, 20).map((r, i) => ({ uid: r.uid, name: r.name, gain: r.gain, cert: byUid[r.uid]?.id || '', tpl: byUid[r.uid]?.tpl || '', place: i + 1 })),
         });
-        return json(200, { ok: true, players: rows.length, awarded: awarded.filter(r => r.cert).length });
+        return json(200, { ok: true, players: rows.length, awarded: out.length });
+      }
+
+      // Yakunlangan chellenjda sertifikat egalari ro'yxati (Telegramga yuborish uchun, hali yuborilmaganlari belgilanadi)
+      case 'challengeCerts': {
+        if (!ID_RE.test(body.id || '')) return json(400, { error: 'ID xato' });
+        const issued = (await call('GET', `challenges/${body.id}/certIssued`)) || {};
+        const items = [];
+        for (const [uid, x] of Object.entries(issued)) {
+          const c = await call('GET', `certs/${uid}/${x.id}`);
+          if (!c) continue;
+          items.push({ uid, id: x.id, tpl: c.tpl, title: c.title || '', reason: c.reason || '', name: c.name || '', date: c.date || '', sent: !!c.sent, tg: /^tg_\d+$/.test(uid) });
+        }
+        items.sort((a, b) => (a.id < b.id ? -1 : 1));
+        return json(200, { items });
+      }
+
+      // Sertifikat rasmini (admin brauzerida chizilgan JPEG) tantanali xabar bilan foydalanuvchining Telegram chatiga yuboradi
+      case 'deliverCert': {
+        if (!process.env.BOT_TOKEN) return json(400, { error: 'BOT_TOKEN yo\'q' });
+        if (!ID_RE.test(body.userId || '') || !ID_RE.test(body.id || '')) return json(400, { error: 'ID xato' });
+        if (!/^tg_\d+$/.test(body.userId)) return json(200, { ok: false, error: 'Telegram hisobi emas' });
+        const c = await call('GET', `certs/${body.userId}/${body.id}`);
+        if (!c) return json(404, { error: 'Sertifikat topilmadi' });
+        const b64 = String(body.image || '').replace(/^data:image\/[a-z]+;base64,/, '');
+        if (b64.length < 1000 || b64.length > 5_000_000) return json(400, { error: 'Rasm hajmi xato' });
+        const buf = Buffer.from(b64, 'base64');
+        if (buf[0] !== 0xff || buf[1] !== 0xd8) return json(400, { error: 'Faqat JPEG qabul qilinadi' });
+        const lines = [`🎉 Tabriklaymiz, ${c.name || "o'quvchi"}!`, '', `🏆 ${c.title}`];
+        if (c.reason) lines.push(c.reason);
+        lines.push('', `№ ${body.id} · ${c.date || ''}`, '', 'VocaBoost — so\'zlarni tez va uzoq yodlang');
+        const form = new FormData();
+        form.append('chat_id', body.userId.slice(3));
+        form.append('caption', lines.join('\n').slice(0, 1024));
+        const markup = openAppMarkup('🚀 VocaBoostni ochish');
+        if (markup) form.append('reply_markup', JSON.stringify(markup));
+        form.append('photo', new Blob([buf], { type: 'image/jpeg' }), `VocaBoost-${body.id}.jpg`);
+        try {
+          await tgApi(process.env.BOT_TOKEN, 'sendPhoto', form);
+        } catch (e) {
+          const forbidden = e.code === 403 || /chat not found|blocked|deactivated/i.test(e.message);
+          return json(200, { ok: false, error: forbidden ? 'Bot foydalanuvchiga yoza olmaydi (Start bosmagan)' : String(e.message || e) });
+        }
+        await call('PATCH', `certs/${body.userId}/${body.id}`, { sent: true });
+        await call('PUT', `certImages/${body.id}`, { b64, ts: Date.now() }).catch(() => {});
+        return json(200, { ok: true });
       }
 
       // ---------- Lug'at to'plamlari ("Bugungi mashqlar") ----------

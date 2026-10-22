@@ -107,6 +107,12 @@ export const handler = async event => {
           return reply(400, { error: "Streak noto'g'ri" });
         }
       }
+      // Admin XP tuzatishi (adj/adjV) faqat admin paneldan o'zgaradi — ilova yozolmaydi
+      if ('adj' in parsed || 'adjV' in parsed) {
+        delete parsed.adj;
+        delete parsed.adjV;
+        body = JSON.stringify(parsed);
+      }
       if (parsed.name && typeof parsed.name === 'string') {
         parsed.name = parsed.name.replace(/[\u0000-\u001f]+/g, ' ').trim().slice(0, 60);
         body = JSON.stringify(parsed);
