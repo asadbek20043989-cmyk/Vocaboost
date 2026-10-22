@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Swords, Plus, Link2, Share2, Copy, Check, Crown, Clock, LogOut, Users, Hash, Zap, Play, Timer, Trophy, RotateCcw, X, Sparkles } from 'lucide-react';
-import { useApp } from '../context/AppContext';
+import { useApp, BLITZ_DAILY_LIMIT, BLITZ_MAX_XP, BLITZ_WIN_MIN_CORRECT } from '../context/AppContext';
 import { Duel, DuelMetric, BankWord } from '../types';
 import { Avatar } from './Avatar';
 import { triggerHaptic, shareUrl, getDuelLink } from '../services/telegram';
@@ -59,7 +59,10 @@ const Standings: React.FC<{ d: Duel; meId: string; ended: boolean }> = ({ d, meI
   );
 };
 
-const BlitzDuelModal: React.FC<{ bank: BankWord[]; onClose: () => void; onWinXp: (xp: number) => void }> = ({ bank, onClose, onWinXp }) => {
+// G'alaba: kamida 3/5 to'g'ri. XP = to'g'ri javoblar + 1, ko'pi bilan 6 (3→4, 4→5, 5→6). Yutqazganda XP yo'q.
+const blitzXp = (correct: number) => (correct >= BLITZ_WIN_MIN_CORRECT ? Math.min(BLITZ_MAX_XP, correct + 1) : 0);
+
+const BlitzDuelModal: React.FC<{ bank: BankWord[]; blitzLeft: number; consumeBlitz: () => boolean; onClose: () => void; onWinXp: (xp: number) => void }> = ({ bank, blitzLeft, consumeBlitz, onClose, onWinXp }) => {
   const [phase, setPhase] = useState<'intro' | 'play' | 'result'>('intro');
   const [qIndex, setQIndex] = useState(0);
   const [questions, setQuestions] = useState<{ word: BankWord; options: string[]; answer: string }[]>([]);
@@ -69,8 +72,11 @@ const BlitzDuelModal: React.FC<{ bank: BankWord[]; onClose: () => void; onWinXp:
   const [selected, setSelected] = useState<string | null>(null);
   const [correctCount, setCorrectCount] = useState(0);
   const timerRef = useRef<any>(null);
+  const awardedRef = useRef(false);
 
   const startDuel = () => {
+    if (!consumeBlitz()) return; // kunlik limit tugagan
+    awardedRef.current = false;
     const pool = shuffle([...bank]).slice(0, 5);
     const qs = pool.map(w => {
       const distractors = shuffle(bank.filter(x => x.id !== w.id)).slice(0, 3).map(x => x.uz);
@@ -143,9 +149,10 @@ const BlitzDuelModal: React.FC<{ bank: BankWord[]; onClose: () => void; onWinXp:
   };
 
   useEffect(() => {
-    if (phase === 'result') {
-      const xpEarned = Math.max(10, Math.round(score / 15));
-      onWinXp(xpEarned);
+    if (phase === 'result' && !awardedRef.current) {
+      awardedRef.current = true;
+      const xpEarned = blitzXp(correctCount);
+      if (xpEarned > 0) onWinXp(xpEarned);
     }
   }, [phase]);
 
@@ -174,14 +181,15 @@ const BlitzDuelModal: React.FC<{ bank: BankWord[]; onClose: () => void; onWinXp:
               </p>
             </div>
             <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
-              💎 G‘oliblik uchun qo‘shimcha XP va sovrinlar beriladi!
+              💎 5 tadan kamida {BLITZ_WIN_MIN_CORRECT} tasini topsangiz yutasiz va {BLITZ_MAX_XP} XP gacha olasiz. Bugun: {blitzLeft} / {BLITZ_DAILY_LIMIT} urinish qoldi.
             </div>
             <button
               type="button"
               onClick={startDuel}
-              className="w-full h-14 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-base flex items-center justify-center gap-2 shadow-xl shadow-orange-500/30 active:scale-95 transition-all"
+              disabled={blitzLeft <= 0}
+              className="w-full h-14 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-base flex items-center justify-center gap-2 shadow-xl shadow-orange-500/30 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
             >
-              <Play className="w-5 h-5 fill-slate-950" /> Jangni boshlash!
+              <Play className="w-5 h-5 fill-slate-950" /> {blitzLeft <= 0 ? 'Bugungi limit tugadi' : 'Jangni boshlash!'}
             </button>
           </div>
         )}
@@ -266,16 +274,17 @@ const BlitzDuelModal: React.FC<{ bank: BankWord[]; onClose: () => void; onWinXp:
             </div>
 
             <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-extrabold text-sm flex items-center justify-center gap-2">
-              <Sparkles className="w-4 h-4" /> +{Math.max(10, Math.round(score / 15))} XP balansingizga qo‘shildi!
+              <Sparkles className="w-4 h-4" /> {blitzXp(correctCount) > 0 ? `🏆 G‘alaba! +${blitzXp(correctCount)} XP balansingizga qo‘shildi` : `Yutish uchun kamida ${BLITZ_WIN_MIN_CORRECT} ta to‘g‘ri javob kerak (XP yo‘q)`}
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={startDuel}
-                className="h-12 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                disabled={blitzLeft <= 0}
+                className="h-12 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
               >
-                <RotateCcw className="w-4 h-4" /> Qayta o‘ynash
+                <RotateCcw className="w-4 h-4" /> {blitzLeft <= 0 ? 'Limit tugadi' : `Qayta o‘ynash (${blitzLeft})`}
               </button>
               <button
                 type="button"
@@ -355,7 +364,7 @@ const DuelCard: React.FC<{ d: Duel; meId: string; onLeave: () => void }> = ({ d,
 };
 
 export const DuelTab: React.FC = () => {
-  const { duels, createDuel, joinDuel, leaveDuel, accountId, realtimeOn, pendingDuelCode, clearPendingDuel, profile, bank, addXp } = useApp();
+  const { duels, createDuel, joinDuel, leaveDuel, accountId, realtimeOn, pendingDuelCode, clearPendingDuel, profile, bank, addXp, blitzLeft, consumeBlitz } = useApp();
   const [blitzOpen, setBlitzOpen] = useState(false);
   const [mode, setMode] = useState<'list' | 'new'>('list');
   const [title, setTitle] = useState('');
@@ -411,6 +420,8 @@ export const DuelTab: React.FC = () => {
       {blitzOpen && (
         <BlitzDuelModal
           bank={bank}
+          blitzLeft={blitzLeft}
+          consumeBlitz={consumeBlitz}
           onClose={() => setBlitzOpen(false)}
           onWinXp={xp => {
             addXp(xp);
@@ -429,7 +440,7 @@ export const DuelTab: React.FC = () => {
             <h3 className="text-base font-extrabold text-white flex items-center gap-1.5">
               30 Soniyalik Blitz Duel <span className="text-[10px] uppercase font-black px-1.5 py-0.5 rounded bg-rose-500 text-white">Yangi</span>
             </h3>
-            <p className="text-xs text-slate-300 mt-0.5">5 ta tezkor so‘z, real vaqtda poyga va XP sovrinlari!</p>
+            <p className="text-xs text-slate-300 mt-0.5">5 ta tezkor so‘z. G‘alabaga {BLITZ_MAX_XP} XP gacha · bugun {blitzLeft} / {BLITZ_DAILY_LIMIT} urinish qoldi</p>
           </div>
         </div>
         <button
@@ -438,9 +449,10 @@ export const DuelTab: React.FC = () => {
             triggerHaptic('medium');
             setBlitzOpen(true);
           }}
-          className="w-full h-12 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 active:scale-[0.98] transition-all"
+          disabled={blitzLeft <= 0}
+          className="disabled:opacity-50 w-full h-12 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 active:scale-[0.98] transition-all"
         >
-          <Swords className="w-4 h-4 fill-slate-950" /> Blitz Duelni boshlash ⚡
+          <Swords className="w-4 h-4 fill-slate-950" /> {blitzLeft <= 0 ? 'Bugungi limit tugadi' : 'Blitz Duelni boshlash ⚡'}
         </button>
       </section>
 
