@@ -28,6 +28,7 @@ interface Tpl {
   wreath: string | null; // gul (lavr) rangi
   crown?: boolean;
   corner?: string; // burchak to'ldirish rangi
+  bg?: { dark: string; mid: string; glow: string; light: string; accent: string }; // fon palitrasi
 }
 
 export const TEMPLATES: Record<string, Tpl> = {
@@ -110,239 +111,144 @@ function metal(ctx: CanvasRenderingContext2D, t: Tpl): CanvasGradient {
   return g;
 }
 
-// ---------- burchak bezaklari: (0,0) — chap-yuqori burchak, o'q ichkariga qarab ----------
-function corner(ctx: CanvasRenderingContext2D, t: Tpl, x: number, y: number, sx: number, sy: number) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(sx, sy);
-  const m = metal(ctx, t);
-  ctx.strokeStyle = m;
-  ctx.fillStyle = m;
-  ctx.lineWidth = 4;
-  switch (t.deco) {
-    case 'bronze': // kvadrat naqshli burchak
-      ctx.strokeRect(-8, -8, 70, 70);
-      ctx.strokeRect(6, 6, 42, 42);
-      ctx.fillRect(18, 18, 18, 18);
-      ctx.beginPath();
-      ctx.moveTo(62, 14); ctx.lineTo(100, 14); ctx.moveTo(14, 62); ctx.lineTo(14, 100);
-      ctx.stroke();
-      break;
-    case 'silver': // qiyshiq (fasetka) kvadratlar
-      ctx.fillRect(-10, -10, 54, 54);
-      ctx.fillStyle = '#0A1220';
-      ctx.fillRect(2, 2, 30, 30);
-      ctx.strokeStyle = m;
-      ctx.beginPath();
-      ctx.moveTo(-10, -10); ctx.lineTo(34, 34);
-      ctx.moveTo(44, 6); ctx.lineTo(120, 6); ctx.moveTo(6, 44); ctx.lineTo(6, 120);
-      ctx.stroke();
-      break;
-    case 'gold': // egri chiziqli naqsh
-      ctx.lineWidth = 3;
-      for (let i = 0; i < 4; i++) {
-        ctx.beginPath();
-        ctx.arc(-6, -6, 40 + i * 18, 0, Math.PI / 2);
-        ctx.stroke();
-      }
-      ctx.beginPath();
-      ctx.moveTo(-6, 112); ctx.quadraticCurveTo(10, 60, 60, 36); ctx.moveTo(112, -6); ctx.quadraticCurveTo(60, 10, 36, 60);
-      ctx.stroke();
-      break;
-    case 'platinum': // diagonal chiziqlar
-      ctx.lineWidth = 5;
-      for (let i = 0; i < 3; i++) {
-        ctx.beginPath();
-        ctx.moveTo(-10 + i * 24, 70 + i * 6 - i * 24 + 24);
-        ctx.lineTo(70 + i * 6, -10 + i * 24 - i * 24);
-        ctx.stroke();
-      }
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(-10, 120); ctx.lineTo(120, -10); ctx.stroke();
-      break;
-    case 'champion': { // qizil uchburchak + oltin chiziqlar
-      ctx.fillStyle = t.corner || '#A3151F';
-      ctx.beginPath(); ctx.moveTo(-4, -4); ctx.lineTo(150, -4); ctx.lineTo(-4, 150); ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = m;
-      ctx.lineWidth = 4;
-      for (let i = 0; i < 3; i++) {
-        ctx.beginPath(); ctx.moveTo(150 + i * 14, -4); ctx.lineTo(-4, 150 + i * 14); ctx.stroke();
-      }
-      break;
-    }
-    case 'active': // kesilgan burchak + yaltirash
-      ctx.lineWidth = 5;
-      ctx.beginPath(); ctx.moveTo(-6, 90); ctx.lineTo(90, -6); ctx.stroke();
-      ctx.strokeStyle = '#F5D36B';
-      ctx.lineWidth = 6;
-      ctx.beginPath(); ctx.moveTo(30, 46); ctx.lineTo(84, -8); ctx.stroke();
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(8, 60); ctx.lineTo(60, 8); ctx.stroke();
-      break;
-    case 'marathon': // tez chiziqlar
-      ctx.lineWidth = 5;
-      for (let i = 0; i < 5; i++) {
-        ctx.beginPath(); ctx.moveTo(-6 + i * 20, 96 - i * 4 - i * 20 + 20); ctx.lineTo(90 - i * 4 + i * 0, -6 + i * 20 - i * 20); ctx.stroke();
-      }
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(110, 0); ctx.lineTo(160, 0); ctx.moveTo(0, 110); ctx.lineTo(0, 160); ctx.stroke();
-      break;
-    case 'thanks': // gul naqshi
-      ctx.lineWidth = 3;
-      for (let k = 0; k < 4; k++) {
-        ctx.save();
-        ctx.translate(34, 34);
-        ctx.rotate((k * Math.PI) / 2);
-        ctx.beginPath();
-        ctx.moveTo(0, 0); ctx.bezierCurveTo(20, -8, 40, -4, 36, 18); ctx.bezierCurveTo(30, 8, 14, 10, 0, 0);
-        ctx.stroke();
-        ctx.restore();
-      }
-      ctx.beginPath(); ctx.arc(34, 34, 5, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(78, 12); ctx.bezierCurveTo(100, 4, 120, 20, 140, 8); ctx.moveTo(12, 78); ctx.bezierCurveTo(4, 100, 20, 120, 8, 140); ctx.stroke();
-      break;
-    case 'trust': // tog' va nafis novda
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(0, 80); ctx.lineTo(40, 20); ctx.lineTo(80, 80); ctx.stroke();
-      for (let k = 0; k < 3; k++) {
-        ctx.beginPath(); ctx.arc(20 + k * 25, 15, 6, 0, Math.PI * 2); ctx.fill();
-      }
-      ctx.beginPath(); ctx.moveTo(10, 95); ctx.lineTo(95, 10); ctx.stroke();
-      break;
-    case 'growth': // cho'qqi va quyosh nurlari
-      ctx.lineWidth = 3.5;
-      ctx.beginPath(); ctx.moveTo(-5, 90); ctx.lineTo(45, 10); ctx.lineTo(95, 90); ctx.stroke();
-      for (let k = 0; k < 4; k++) {
-        ctx.beginPath(); ctx.moveTo(45, 10); ctx.lineTo(30 + k * 10, -10); ctx.stroke();
-      }
-      ctx.beginPath(); ctx.arc(45, 10, 5, 0, Math.PI * 2); ctx.fill();
-      break;
-    case 'wisdom': // ochiq kitob va qalam silueti
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(15, 40); ctx.quadraticCurveTo(40, 25, 65, 40); ctx.quadraticCurveTo(90, 25, 115, 40); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(65, 40); ctx.lineTo(65, 75); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(15, 40); ctx.lineTo(15, 75); ctx.quadraticCurveTo(40, 60, 65, 75); ctx.quadraticCurveTo(90, 60, 115, 75); ctx.lineTo(115, 40); ctx.stroke();
-      break;
-    case 'speed': // yashin chaqmoq
-      ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.moveTo(40, -5); ctx.lineTo(15, 40); ctx.lineTo(45, 35); ctx.lineTo(20, 90); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(-5, 45); ctx.lineTo(90, 45); ctx.stroke();
-      break;
-    case 'reviewer': // oltin yulduzlar va toj
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(10, 45); ctx.lineTo(25, 15); ctx.lineTo(45, 35); ctx.lineTo(65, 15); ctx.lineTo(80, 45); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.arc(45, 70, 7, 0, Math.PI * 2); ctx.fill();
-      break;
-    case 'expert': // lampochka va yulduz
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(45, 35, 20, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(35, 55); ctx.lineTo(55, 55); ctx.moveTo(38, 62); ctx.lineTo(52, 62); ctx.stroke();
-      for (let k = 0; k < 4; k++) {
-        const rad = (k * Math.PI) / 2;
-        ctx.beginPath(); ctx.moveTo(45 + Math.cos(rad) * 26, 35 + Math.sin(rad) * 26); ctx.lineTo(45 + Math.cos(rad) * 36, 35 + Math.sin(rad) * 36); ctx.stroke();
-      }
-      break;
-    case 'consistent': // o'rmon barglari
-      ctx.lineWidth = 3;
-      for (let k = 0; k < 3; k++) {
-        ctx.beginPath(); ctx.ellipse(25 + k * 22, 25 + k * 18, 16, 7, Math.PI / 4, 0, Math.PI * 2); ctx.fill();
-      }
-      ctx.beginPath(); ctx.moveTo(10, 15); ctx.quadraticCurveTo(50, 50, 85, 85); ctx.stroke();
-      break;
-    case 'limitless': // cheksizlik belgisi va kosmik nuqtalar
-      ctx.lineWidth = 3.5;
-      ctx.beginPath();
-      ctx.moveTo(30, 40);
-      ctx.bezierCurveTo(30, 20, 50, 20, 60, 40);
-      ctx.bezierCurveTo(70, 60, 90, 60, 90, 40);
-      ctx.bezierCurveTo(90, 20, 70, 20, 60, 40);
-      ctx.bezierCurveTo(50, 60, 30, 60, 30, 40);
-      ctx.stroke();
-      for (let k = 0; k < 5; k++) {
-        ctx.beginPath(); ctx.arc(15 + k * 20, 15 + ((k * 17) % 30), 2.5, 0, Math.PI * 2); ctx.fill();
-      }
-      break;
-  }
-  ctx.restore();
+// ---------- Yagona art-deko uslub: oltin ramka, shablonga qarab o'zgaruvchan fon, yaltiroq yulduzlar ----------
+const GOLD: [string, string, string] = ['#FFF0B3', '#E4B24C', '#8F651B'];
+interface BgPal { dark: string; mid: string; glow: string; light: string; accent: string }
+const BGK: Record<string, BgPal> = {
+  teal: { dark: '#03161A', mid: '#0A4A47', glow: '#19C2A5', light: '#7FF0D6', accent: '#2DD4A8' },
+  blue: { dark: '#050F28', mid: '#0C3A7C', glow: '#3B82F6', light: '#93C5FD', accent: '#60A5FA' },
+  purple: { dark: '#120726', mid: '#3A1C78', glow: '#8B5CF6', light: '#C4B5FD', accent: '#A78BFA' },
+  amber: { dark: '#170F04', mid: '#4A3410', glow: '#D9A21B', light: '#FDE68A', accent: '#F5C21B' },
+};
+const BG_OF: Record<string, string> = { marathon: 'blue', thanks: 'purple', expert: 'purple', limitless: 'purple', growth: 'amber', wisdom: 'amber' };
+Object.entries(TEMPLATES).forEach(([k, t]) => {
+  const pal = BGK[BG_OF[k] || 'teal'];
+  t.bg = pal;
+  t.frame = GOLD;
+  t.accent = pal.accent;
+  t.head = ['#FFF3BF', '#D9A331'];
+  t.nameGrad = ['#FFFFFF', '#F0C463'];
+});
+
+function rnd(seed: number) {
+  let x = seed || 1;
+  return () => ((x = (x * 16807) % 2147483647) - 1) / 2147483646;
 }
 
+function background(ctx: CanvasRenderingContext2D, t: Tpl) {
+  const pal = t.bg || BGK.teal;
+  const m = Math.min(W, H);
+  const g = ctx.createLinearGradient(0, 0, W * 0.35, H);
+  g.addColorStop(0, pal.dark);
+  g.addColorStop(0.45, pal.mid);
+  g.addColorStop(1, pal.dark);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  // markaziy nur
+  const gl = ctx.createRadialGradient(W / 2, H * 0.4, 20, W / 2, H * 0.4, Math.max(W, H) * 0.62);
+  gl.addColorStop(0, pal.glow + '55');
+  gl.addColorStop(1, pal.glow + '00');
+  ctx.fillStyle = gl;
+  ctx.fillRect(0, 0, W, H);
+
+  // katta geometrik (art-deko) shakllar
+  const poly = (pts: number[][], fillA: number, strokeA: number) => {
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.closePath();
+    ctx.fillStyle = pal.light + Math.round(fillA * 255).toString(16).padStart(2, '0');
+    ctx.fill();
+    ctx.strokeStyle = pal.light + Math.round(strokeA * 255).toString(16).padStart(2, '0');
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  };
+  const dia = (cx: number, cy: number, r: number, f: number, sA: number) => poly([[cx, cy - r], [cx + r, cy], [cx, cy + r], [cx - r, cy]], f, sA);
+  dia(W * 0.08, H * 0.82, m * 0.5, 0.07, 0.2);
+  dia(W * 0.08, H * 0.82, m * 0.34, 0.06, 0.18);
+  dia(W * 0.96, H * 0.94, m * 0.42, 0.07, 0.18);
+  dia(W * 0.98, H * 0.18, m * 0.3, 0.05, 0.14);
+  // yuqoridagi "V" yo'llar
+  poly([[0, H * 0.13], [W / 2, H * 0.3], [W, H * 0.13], [W, H * 0.17], [W / 2, H * 0.34], [0, H * 0.17]], 0.06, 0.14);
+  poly([[0, H * 0.19], [W / 2, H * 0.36], [W, H * 0.19], [W, H * 0.21], [W / 2, H * 0.38], [0, H * 0.21]], 0.04, 0.1);
+
+  // yorqin nur chiziqlari (pastki o'ng)
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 4; i++) {
+    const x0 = W * (0.72 + i * 0.07), y0 = H;
+    const lg = ctx.createLinearGradient(x0, y0, x0 - m * 0.5, y0 - m * 0.5);
+    lg.addColorStop(0, pal.light + 'AA');
+    lg.addColorStop(1, pal.light + '00');
+    ctx.strokeStyle = lg;
+    ctx.lineWidth = 2.5 - i * 0.4;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0 - m * 0.5, y0 - m * 0.5); ctx.stroke();
+  }
+  ctx.restore();
+
+  // yulduzcha zarralar (har bir sertifikatda bir xil joylashuv)
+  const r = rnd(W * 31 + H);
+  for (let i = 0; i < 90; i++) {
+    const x = r() * W, y = r() * H, s = 0.8 + r() * 2.4, a = 0.12 + r() * 0.5;
+    ctx.beginPath();
+    ctx.arc(x, y, s, 0, Math.PI * 2);
+    ctx.fillStyle = (r() > 0.6 ? '#FFF3BF' : pal.light) + Math.round(a * 255).toString(16).padStart(2, '0');
+    ctx.fill();
+  }
+  // chetlarni qoraytirish
+  const vg = ctx.createRadialGradient(W / 2, H / 2, m * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.5)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+}
+
+/** Oltin ikki qatlamli ramka + burchaklardan chiquvchi nur chiziqlari */
 function frame(ctx: CanvasRenderingContext2D, t: Tpl) {
   const m = metal(ctx, t);
+  const o = 30, i2 = 54;
   ctx.strokeStyle = m;
-  ctx.lineWidth = 7;
-  const o = 38;
-  if (t.deco === 'active' || t.deco === 'champion') {
-    // kesilgan burchakli (sakkizburchak) ramka
-    const c = t.deco === 'active' ? 64 : 0;
-    ctx.beginPath();
-    ctx.moveTo(o + c, o); ctx.lineTo(W - o - c, o); ctx.lineTo(W - o, o + c); ctx.lineTo(W - o, H - o - c);
-    ctx.lineTo(W - o - c, H - o); ctx.lineTo(o + c, H - o); ctx.lineTo(o, H - o - c); ctx.lineTo(o, o + c);
-    ctx.closePath();
-    ctx.stroke();
-  } else ctx.strokeRect(o, o, W - o * 2, H - o * 2);
-  ctx.lineWidth = 2.5;
-  const i2 = 66;
-  if (t.deco === 'active') {
-    const c = 52;
-    ctx.beginPath();
-    ctx.moveTo(i2 + c, i2); ctx.lineTo(W - i2 - c, i2); ctx.lineTo(W - i2, i2 + c); ctx.lineTo(W - i2, H - i2 - c);
-    ctx.lineTo(W - i2 - c, H - i2); ctx.lineTo(i2 + c, H - i2); ctx.lineTo(i2, H - i2 - c); ctx.lineTo(i2, i2 + c);
-    ctx.closePath();
-    ctx.stroke();
-  } else ctx.strokeRect(i2, i2, W - i2 * 2, H - i2 * 2);
-  if (t.deco !== 'active') {
-    const off = t.deco === 'champion' ? 38 : 30;
-    corner(ctx, t, off, off, 1, 1);
-    corner(ctx, t, W - off, off, -1, 1);
-    corner(ctx, t, off, H - off, 1, -1);
-    corner(ctx, t, W - off, H - off, -1, -1);
-  } else {
-    corner(ctx, t, o + 4, o + 4, 1, 1);
-    corner(ctx, t, W - o - 4, o + 4, -1, 1);
-    corner(ctx, t, o + 4, H - o - 4, 1, -1);
-    corner(ctx, t, W - o - 4, H - o - 4, -1, -1);
-  }
-}
-
-function laurel(ctx: CanvasRenderingContext2D, cx: number, cy: number, side: 1 | -1, color: string) {
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.scale(side, 1);
-  ctx.fillStyle = color;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(0, 44);
-  ctx.bezierCurveTo(26, 36, 44, 10, 40, -40);
-  ctx.stroke();
-  for (let i = 0; i < 7; i++) {
-    const t = i / 6;
-    const px = 6 + Math.sin(t * 1.9) * 34 - t * 3;
-    const py = 40 - t * 78;
-    for (const dir of [-1, 1]) {
-      ctx.save();
-      ctx.translate(px, py);
-      ctx.rotate(-0.9 + t * 0.7 + (dir === 1 ? 0.55 : -0.35));
-      ctx.beginPath();
-      ctx.ellipse(dir === 1 ? 10 : -4, dir === 1 ? -4 : 4, 15 - t * 3, 5.6 - t * 0.6, dir === 1 ? -0.3 : 0.3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+  ctx.lineWidth = 3.5;
+  ctx.strokeRect(o, o, W - o * 2, H - o * 2);
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(i2, i2, W - i2 * 2, H - i2 * 2);
+  const L = Math.min(W, H) * 0.3;
+  [[o, o, 1, 1], [W - o, o, -1, 1], [o, H - o, 1, -1], [W - o, H - o, -1, -1]].forEach(([cx, cy, sx, sy]) => {
+    for (let k = 0; k < 9; k++) {
+      const ang = (6 + k * 9.5) * (Math.PI / 180);
+      const len = L * (0.45 + 0.55 * Math.abs(Math.sin(k * 1.37 + 0.6)));
+      const ex = cx + sx * Math.cos(ang) * len, ey = cy + sy * Math.sin(ang) * len;
+      const lg = ctx.createLinearGradient(cx, cy, ex, ey);
+      lg.addColorStop(0, 'rgba(255,230,150,0.95)');
+      lg.addColorStop(1, 'rgba(228,178,76,0)');
+      ctx.strokeStyle = lg;
+      ctx.lineWidth = k % 3 === 0 ? 2.2 : 1.2;
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ex, ey); ctx.stroke();
     }
-  }
-  ctx.restore();
+    ctx.fillStyle = '#FFE9A8';
+    ctx.beginPath(); ctx.moveTo(cx, cy - 9); ctx.lineTo(cx + 9, cy); ctx.lineTo(cx, cy + 9); ctx.lineTo(cx - 9, cy); ctx.closePath(); ctx.fill();
+  });
 }
 
-function crown(ctx: CanvasRenderingContext2D, cx: number, y: number, color: string) {
+/** To'rt qirrali yaltiroq yulduz (lentaning ikki yonida) */
+function sparkle(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color = '#FFF1B0') {
   ctx.save();
-  ctx.translate(cx, y);
-  const g = vGrad(ctx, -26, 20, '#FFE9A0', '#E1A116');
+  ctx.translate(x, y);
+  ctx.shadowColor = color;
+  ctx.shadowBlur = r * 1.1;
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+  g.addColorStop(0, '#FFFFFF');
+  g.addColorStop(0.35, color);
+  g.addColorStop(1, '#D9A331');
   ctx.fillStyle = g;
   ctx.beginPath();
-  ctx.moveTo(-34, 18); ctx.lineTo(-40, -16); ctx.lineTo(-18, 0); ctx.lineTo(0, -26); ctx.lineTo(18, 0); ctx.lineTo(40, -16); ctx.lineTo(34, 18);
+  const k = r * 0.16;
+  ctx.moveTo(0, -r);
+  ctx.quadraticCurveTo(k, -k, r, 0);
+  ctx.quadraticCurveTo(k, k, 0, r);
+  ctx.quadraticCurveTo(-k, k, -r, 0);
+  ctx.quadraticCurveTo(-k, -k, 0, -r);
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = color;
-  [[-40, -18], [0, -29], [40, -18]].forEach(([x, yy]) => { ctx.beginPath(); ctx.arc(x, yy, 5, 0, Math.PI * 2); ctx.fill(); });
   ctx.restore();
 }
 
@@ -370,52 +276,17 @@ function ribbon(ctx: CanvasRenderingContext2D, t: Tpl, cx: number, cy: number): 
   ctx.closePath();
   ctx.fill();
   ctx.restore();
-  ctx.strokeStyle = t.ribbon[0];
-  ctx.lineWidth = 2;
-  ctx.globalAlpha = 0.8;
+  ctx.strokeStyle = metal(ctx, t); // oltin qirra
+  ctx.lineWidth = 3.5;
   ctx.stroke();
-  ctx.globalAlpha = 1;
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(x0 + notch + 6, y0 + 7); ctx.lineTo(x1 - notch - 6, y0 + 7); ctx.stroke();
   ctx.fillStyle = t.ribbonInk;
   ctx.textBaseline = 'middle';
   spaced(ctx, t.ribbonText, cx, cy + 2, 6);
   ctx.textBaseline = 'alphabetic';
   return half;
-}
-
-function sideDeco(ctx: CanvasRenderingContext2D, t: Tpl, cx: number, cy: number, half: number) {
-  const gx = half + 44;
-  if (t.wreath) {
-    laurel(ctx, cx - gx, cy, -1, t.wreath);
-    laurel(ctx, cx + gx, cy, 1, t.wreath);
-    return;
-  }
-  const m = metal(ctx, t);
-  ctx.strokeStyle = m;
-  ctx.fillStyle = m;
-  ctx.lineWidth = 4;
-  if (t.deco === 'bronze') {
-    [-1, 1].forEach(s => {
-      ctx.beginPath(); ctx.moveTo(cx + s * (half + 40), cy); ctx.lineTo(cx + s * (half + 110), cy); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx + s * (half + 126), cy); ctx.lineTo(cx + s * (half + 138), cy - 8); ctx.lineTo(cx + s * (half + 150), cy); ctx.lineTo(cx + s * (half + 138), cy + 8); ctx.closePath(); ctx.fill();
-    });
-  } else if (t.deco === 'marathon') {
-    [-1, 1].forEach(s => {
-      [-14, 0, 14].forEach((dy, i) => {
-        ctx.beginPath(); ctx.moveTo(cx + s * (half + 24), cy + dy); ctx.lineTo(cx + s * (half + 150 - i * 22), cy + dy); ctx.stroke();
-      });
-    });
-  } else if (t.deco === 'thanks') {
-    [-1, 1].forEach(s => {
-      ctx.save();
-      ctx.translate(cx + s * (half + 70), cy);
-      ctx.scale(s, 1);
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(30, -34, 70, -20, 56, 4); ctx.bezierCurveTo(46, 20, 24, 8, 36, -4); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(30, 30, 70, 20, 56, -2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(-4, 0, 5, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    });
-  }
 }
 
 let logoPromise: Promise<HTMLImageElement | null> | null = null;
@@ -441,28 +312,33 @@ function statPills(ctx: CanvasRenderingContext2D, t: Tpl, cx: number, y: number,
   const gap = 20;
   const total = items.length * pw + (items.length - 1) * gap;
   let x = cx - total / 2;
-  const lg = metal(ctx, t);
-  items.forEach(([label, value]) => {
+  items.forEach(([label, value], idx) => {
+    const isGold = label === 'STREAK';
+    const edge = isGold ? '#F5C95A' : t.accent;
     const r = 16;
     ctx.beginPath();
     ctx.moveTo(x + r, y); ctx.lineTo(x + pw - r, y); ctx.quadraticCurveTo(x + pw, y, x + pw, y + r);
     ctx.lineTo(x + pw, y + ph - r); ctx.quadraticCurveTo(x + pw, y + ph, x + pw - r, y + ph);
     ctx.lineTo(x + r, y + ph); ctx.quadraticCurveTo(x, y + ph, x, y + ph - r);
     ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
-    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillStyle = 'rgba(255,255,255,0.07)';
     ctx.fill();
-    ctx.strokeStyle = lg;
+    ctx.save();
+    ctx.shadowColor = edge;
+    ctx.shadowBlur = 12;
+    ctx.strokeStyle = edge;
     ctx.lineWidth = 2.5;
     ctx.stroke();
+    ctx.restore();
     ctx.textAlign = 'center';
-    ctx.fillStyle = t.accent;
+    ctx.fillStyle = edge;
     ctx.font = `800 15px ${SANS}`;
-    spaced(ctx, label, x + pw / 2, y + 23, 2);
+    spaced(ctx, label, x + pw / 2, y + 22, 2);
     ctx.fillStyle = '#F1F5FB';
     let fs = 31;
     ctx.font = `800 ${fs}px ${SERIF}`;
     while (ctx.measureText(value).width > pw - 20 && fs > 18) { fs -= 2; ctx.font = `800 ${fs}px ${SERIF}`; }
-    ctx.fillText(value, x + pw / 2, y + ph - 15);
+    ctx.fillText(value, x + pw / 2, y + ph - 13);
     x += pw + gap;
   });
 }
@@ -486,24 +362,7 @@ export async function drawCertificate(canvas: HTMLCanvasElement, c: Certificate)
   canvas.height = H;
   ctx.textAlign = 'center';
 
-  // fon
-  const bg = ctx.createLinearGradient(0, 0, W, H);
-  bg.addColorStop(0, '#040915');
-  bg.addColorStop(1, '#0B152B');
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, W, H);
-  const glow = ctx.createRadialGradient(W / 2, H * 0.42, 40, W / 2, H * 0.42, story ? 1100 : 900);
-  glow.addColorStop(0, t.frame[1] + '2E');
-  glow.addColorStop(1, t.frame[1] + '00');
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, W, H);
-  // nozik to'lqin chiziqlar
-  ctx.strokeStyle = t.frame[1] + '30';
-  ctx.lineWidth = 2;
-  for (let i = 0; i < 7; i++) {
-    ctx.beginPath(); ctx.moveTo(90, H - 90 - i * 10); ctx.bezierCurveTo(260, H - 220 - i * 14, 420, H - 70, 640, H - 90 - i * 6); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(W - 90, 90 + i * 10); ctx.bezierCurveTo(W - 260, 220 + i * 14, W - 420, 70, W - 640, 90 + i * 6); ctx.stroke();
-  }
+  background(ctx, t);
 
   frame(ctx, t);
 
@@ -536,17 +395,23 @@ export async function drawCertificate(canvas: HTMLCanvasElement, c: Certificate)
   }
   const headY = story ? 440 : 330;
   ctx.save();
-  ctx.shadowColor = 'rgba(0,0,0,0.5)';
-  ctx.shadowBlur = 14;
-  ctx.shadowOffsetY = 5;
-  spaced(ctx, 'SERTIFIKAT', W / 2, headY, hGap, vGrad(ctx, headY - 120, headY + 10, t.head[0], t.head[1]));
+  spaced(ctx, 'SERTIFIKAT', W / 2, headY + 5, hGap, '#4A3108'); // chuqur soya (bo'rtma ko'rinish)
+  ctx.shadowColor = 'rgba(255,200,80,0.45)';
+  ctx.shadowBlur = 22;
+  spaced(ctx, 'SERTIFIKAT', W / 2, headY, hGap, vGrad(ctx, headY - hs * 0.8, headY + 6, t.head[0], t.head[1]));
   ctx.restore();
 
   // lenta (tur nomi), gul, toj
   const ry = story ? 560 : 428;
   const half = ribbon(ctx, t, W / 2, ry);
-  if (!story || half + 150 < W / 2 - 80) sideDeco(ctx, t, W / 2, ry, half);
-  if (t.crown) crown(ctx, W / 2, ry - 54, '#FFF3C4');
+  const sx = half + (story ? 62 : 90);
+  if (W / 2 + sx + 36 < W - 100) {
+    [-1, 1].forEach(sd => {
+      sparkle(ctx, W / 2 + sd * sx, ry, story ? 34 : 42);
+      sparkle(ctx, W / 2 + sd * (sx + 44), ry - 26, 9);
+      sparkle(ctx, W / 2 + sd * (sx - 30), ry + 30, 7);
+    });
+  }
 
   // matnlar
   ctx.fillStyle = '#D9E0EC';
@@ -563,8 +428,12 @@ export async function drawCertificate(canvas: HTMLCanvasElement, c: Certificate)
     ctx.font = `800 ${size}px ${SERIF}`;
   }
   const nameY = story ? 830 : 668;
-  ctx.fillStyle = vGrad(ctx, nameY - 68, nameY + 22, t.nameGrad[0], t.nameGrad[1]);
+  ctx.save();
+  ctx.shadowColor = 'rgba(255,205,90,0.55)';
+  ctx.shadowBlur = 26;
+  ctx.fillStyle = vGrad(ctx, nameY - size * 0.75, nameY + 12, t.nameGrad[0], t.nameGrad[1]);
   ctx.fillText(nm, W / 2, nameY);
+  ctx.restore();
 
   // chiziq + olmos
   const my = story ? 880 : 704;
@@ -595,13 +464,13 @@ export async function drawCertificate(canvas: HTMLCanvasElement, c: Certificate)
   }
 
   // QR joylashuvi (format bo'yicha)
-  const qs = story ? 250 : 210;
+  const qs = story ? 300 : 210;
   const qx = story ? W / 2 - qs / 2 : W - 150 - qs;
-  const qy = story ? 1400 : H - 140 - qs - 24;
+  const qy = story ? 1330 : H - 140 - qs - 24;
 
   // Muhrlar: daraja / so'zlar / streak (joy yetsagina chiziladi)
   if (c.stats) {
-    const ph = story ? 68 : 62;
+    const ph = story ? 72 : 68;
     const sy = lastY + (story ? 46 : 40);
     const limit = story ? qy - 30 : H - 150;
     if (sy + ph <= limit) statPills(ctx, t, W / 2, sy, c.stats, story ? 250 : 220, ph);

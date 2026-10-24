@@ -37,7 +37,11 @@ export const GlowAvatar: React.FC<{ rank: Rank; src?: string; name: string; size
     <div className={`pd-wrap ${t.cls}`} style={{ width: px, height: px, marginTop: rank === 1 ? 18 : 0 }}>
       <span className="pd-halo" />
       <span className="pd-ring" />
-      {rank === 1 && <Crown w={Math.round(px * 0.72)} />}
+      {rank === 1 && (
+        <span className="pd-crown-pos">
+          <Crown w={Math.round(px * 0.78)} />
+        </span>
+      )}
       <span className="pd-spark" style={{ top: -4, right: -2, animationDelay: '0s' }} />
       <span className="pd-spark" style={{ bottom: 2, left: -6, animationDelay: '0.7s' }} />
       {rank === 1 && <span className="pd-spark" style={{ top: 10, left: -10, animationDelay: '1.3s' }} />}

@@ -223,3 +223,6 @@ Ushbu versiyada barcha so'ralgan funksiyalar va tizim takomillashtirishlari to'l
 
 ## Talaffuz (TTS) — Netlify krediti 0
 Ilova endi `/.netlify/functions/tts` ni chaqirmaydi. Ketma-ketlik: inson yozuvi (Free Dictionary) → Wikimedia inson yozuvi → sifatli tizim ovozi → Google TTS → brauzer ovozi. Eski serverli neyral ovozni qaytarish uchun Netlify env'da `VITE_SERVER_TTS=1` qo'ying (kredit sarflaydi).
+
+## v4.7.2 — sertifikat dizayni
+Barcha 16 shablon yagona art-deko uslubda: oltin ramka va burchak nurlari, fon rangi shablonga qarab (yashil / ko'k / binafsha / oltin-jigarrang), oltin «SERTIFIKAT», yaltiroq yulduzlar, daraja-so'z-streak muhrlari. Ikkala format (16:9 va 9:16) bir xil uslubda. Dizayn `src/services/certificate.ts` da; o'zgartirsangiz `public/cert-render.js` ni qayta yig'ing (yuqoridagi buyruq).
