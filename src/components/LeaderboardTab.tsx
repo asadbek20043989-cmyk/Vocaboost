@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Trophy,
   Flame,
@@ -11,7 +11,11 @@ import {
   CheckCircle2,
   Volume2,
   VolumeX,
-  Users
+  Users,
+  Landmark,
+  MessageSquare,
+  X,
+  Send
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { EnglishLevel } from '../types';
@@ -22,14 +26,18 @@ import { botSetRemind } from '../services/bot';
 import { Avatar } from './Avatar';
 import { DuelTab } from './DuelTab';
 import { ChallengesTab } from './ChallengesTab';
+import { Podium, GlowAvatar } from './Podium';
+import { HallOfHistory } from './HallOfHistory';
+import { loadHall, championCounts } from '../services/hall';
+import { sendAdminMessage, MsgKind } from '../services/inbox';
 
 export const LeaderboardTab: React.FC = () => {
-  const { profile, savedWords, badges, updateProfile, resetProgress, leagueUsers, leagueLive, realtimeOn, showCertificate, certificates, accountId, isTelegram, linkAccount, realtimeOn: rtOn } = useApp();
+  const { profile, savedWords, badges, updateProfile, resetProgress, leagueUsers, leagueLive, realtimeOn, showCertificate, certificates, accountId, isTelegram, linkAccount, realtimeOn: rtOn, leagueWeek } = useApp();
   const [linkCode, setLinkCode] = useState('');
   const [linkMsg, setLinkMsg] = useState('');
 
   const { pendingDuelCode } = useApp();
-  const [activeSubTab, setActiveSubTab] = useState<'league' | 'duel' | 'challenge' | 'profile'>(() => {
+  const [activeSubTab, setActiveSubTab] = useState<'league' | 'duel' | 'challenge' | 'profile' | 'hall'>(() => {
     let want = '';
     try {
       want = sessionStorage.getItem('vb_liga_sub') || '';
@@ -41,6 +49,43 @@ export const LeaderboardTab: React.FC = () => {
   });
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [displayLimit, setDisplayLimit] = useState(50);
+
+  // Haftalik chempionlar (Tarix zalidan): podium va ro'yxatda 🏆 belgisi uchun. Ma'lumot o'zgarmaydi, bir marta yuklanadi.
+  const [champs, setChamps] = useState<Record<string, { gold: number; top3: number }>>({});
+  useEffect(() => {
+    let dead = false;
+    loadHall()
+      .then(w => !dead && setChamps(championCounts(w)))
+      .catch(() => {});
+    return () => {
+      dead = true;
+    };
+  }, []);
+
+  // Adminga xabar yozish
+  const [showMsg, setShowMsg] = useState(false);
+  const [msgKind, setMsgKind] = useState<MsgKind>('savol');
+  const [msgText, setMsgText] = useState('');
+  const [msgBusy, setMsgBusy] = useState(false);
+  const [msgInfo, setMsgInfo] = useState<{ ok: boolean; text: string } | null>(null);
+  const submitMsg = async () => {
+    if (msgBusy) return;
+    const text = msgText.trim();
+    if (text.length < 3) return setMsgInfo({ ok: false, text: 'Xabarni biroz batafsilroq yozing' });
+    setMsgBusy(true);
+    setMsgInfo(null);
+    try {
+      await sendAdminMessage(accountId, profile.name, msgKind, text);
+      triggerHaptic('success');
+      setMsgInfo({ ok: true, text: '✅ Xabaringiz adminga yuborildi. Rahmat!' });
+      setMsgText('');
+    } catch (e: any) {
+      triggerHaptic('error');
+      setMsgInfo({ ok: false, text: e?.message || 'Yuborib bo‘lmadi, qayta urinib ko‘ring' });
+    } finally {
+      setMsgBusy(false);
+    }
+  };
 
   // Settings form state
   const [editName, setEditName] = useState(profile.name);
@@ -57,6 +102,22 @@ export const LeaderboardTab: React.FC = () => {
   const leaderboardList = leagueUsers;
 
   const currentUserRank = leaderboardList.findIndex(u => u.isCurrentUser) + 1;
+
+  // Raqobatni qizdiruvchi qisqa gap: kimgacha necha XP qolgan
+  const rivalLine = (() => {
+    if (!currentUserRank || leaderboardList.length < 2) return '';
+    const me = leaderboardList[currentUserRank - 1];
+    if (currentUserRank === 1) {
+      const gap = me.xp - (leaderboardList[1]?.xp || 0);
+      return `👑 Siz 1-o‘rindasiz! Ikkinchi o‘rindagi sizdan ${gap.toLocaleString()} XP orqada — taxtni qo‘ldan bermang!`;
+    }
+    const above = leaderboardList[currentUserRank - 2];
+    const gap = Math.max(1, above.xp - me.xp + 1);
+    if (currentUserRank <= 3) return `🔥 Siz TOP-3 dasiz! ${currentUserRank - 1}-o‘ringa chiqish uchun yana ${gap.toLocaleString()} XP kerak.`;
+    const third = leaderboardList[2];
+    const toTop3 = third ? Math.max(1, third.xp - me.xp + 1) : 0;
+    return `⚡ ${currentUserRank - 1}-o‘ringa ${gap.toLocaleString()} XP qoldi${toTop3 ? ` · TOP-3 gacha ${toTop3.toLocaleString()} XP` : ''}. Bugun bir mashq ko‘proq qiling!`;
+  })();
 
   const handleSaveSettings = () => {
     triggerHaptic('success');
@@ -168,7 +229,7 @@ export const LeaderboardTab: React.FC = () => {
             <div className="flex items-center justify-between text-xs text-slate-300 font-semibold mb-3">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/60 text-slate-200 font-semibold text-[11px] shadow-sm">
                 <Users className="w-3.5 h-3.5 text-amber-400" />
-                <span>{leaderboardList.length > 0 ? `${leaderboardList.length.toLocaleString()} ta o'quvchi` : 'O\'quvchilar...'}</span>
+                <span>{leagueWeek ? `${leagueWeek.week}-hafta · ` : ''}{leaderboardList.length > 0 ? `${leaderboardList.length.toLocaleString()} ta o'quvchi` : 'O\'quvchilar...'}</span>
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span className="relative flex h-2.5 w-2.5">
@@ -179,50 +240,25 @@ export const LeaderboardTab: React.FC = () => {
               </span>
             </div>
 
-            <div className="flex items-end justify-around pt-2 pb-1">
-              {/* 2nd place */}
-              {leaderboardList[1] && (
-                <div className="flex flex-col items-center">
-                  <span className="text-xs font-bold text-slate-400 mb-1">2-o&apos;rin</span>
-                  <Avatar src={leaderboardList[1].avatar} name={leaderboardList[1].name} className="w-12 h-12  border-2 border-slate-400" />
-                  <span className="text-xs font-bold text-white mt-1 max-w-[80px] truncate text-center">
-                    {leaderboardList[1].name}
-                  </span>
-                  <span className="text-[11px] font-mono text-amber-400 tabular-nums">
-                    {leaderboardList[1].xp} XP
-                  </span>
-                </div>
-              )}
-
-              {/* 1st place */}
-              {leaderboardList[0] && (
-                <div className="flex flex-col items-center -translate-y-2">
-                  <div className="text-amber-400 mb-1">👑 1-o&apos;rin</div>
-                  <Avatar src={leaderboardList[0].avatar} name={leaderboardList[0].name} className="w-16 h-16  border-2 border-amber-400   shadow-lg shadow-amber-500/20" />
-                  <span className="text-sm font-bold text-white mt-1 max-w-[90px] truncate text-center">
-                    {leaderboardList[0].name}
-                  </span>
-                  <span className="text-xs font-mono font-bold text-amber-400 tabular-nums">
-                    {leaderboardList[0].xp} XP
-                  </span>
-                </div>
-              )}
-
-              {/* 3rd place */}
-              {leaderboardList[2] && (
-                <div className="flex flex-col items-center">
-                  <span className="text-xs font-bold text-amber-600 mb-1">3-o&apos;rin</span>
-                  <Avatar src={leaderboardList[2].avatar} name={leaderboardList[2].name} className="w-12 h-12  border-2 border-amber-700" />
-                  <span className="text-xs font-bold text-white mt-1 max-w-[80px] truncate text-center">
-                    {leaderboardList[2].name}
-                  </span>
-                  <span className="text-[11px] font-mono text-amber-400 tabular-nums">
-                    {leaderboardList[2].xp} XP
-                  </span>
-                </div>
-              )}
-            </div>
+            <Podium users={leaderboardList.slice(0, 3)} badges={champs} />
           </div>
+
+          {/* Raqobat: kimgacha necha XP qolgan + Tarix zali */}
+          {rivalLine && (
+            <div className="rounded-2xl bg-gradient-to-r from-orange-500/15 via-amber-500/10 to-rose-500/15 border border-orange-500/30 px-3.5 py-2.5 text-xs font-semibold text-amber-100 leading-snug">{rivalLine}</div>
+          )}
+          <button
+            type="button"
+            onClick={() => { triggerHaptic('medium'); setActiveSubTab('hall'); }}
+            className="w-full p-3 rounded-2xl bg-gradient-to-r from-amber-500/20 via-yellow-500/10 to-amber-500/20 border border-amber-500/40 flex items-center gap-3 text-left active:scale-[0.99] transition-all"
+          >
+            <Landmark className="w-6 h-6 text-amber-400 shrink-0" />
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-extrabold text-white">Tarix zali</span>
+              <span className="block text-[11px] text-slate-400">Oldingi haftalarning TOP-20 chempionlari · abadiy saqlanadi</span>
+            </span>
+            <span className="text-amber-400 text-lg">›</span>
+          </button>
 
           {/* Current User Fixed Position Strip */}
           <div className="p-3.5 rounded-2xl bg-amber-500/10 border-2 border-amber-500/50 flex items-center justify-between shadow-md">
@@ -264,16 +300,16 @@ export const LeaderboardTab: React.FC = () => {
                     isMe
                       ? 'bg-amber-500/15 border-amber-500/60'
                       : 'bg-[#151C28] border-slate-800/80 hover:bg-[#1B2333]'
-                  }`}
+                  } ${rank === 1 ? 'row-gold' : rank === 2 ? 'row-silver' : rank === 3 ? 'row-bronze' : ''}`}
                 >
                   <div className="flex items-center gap-3">
                     <span className="font-bold text-xs text-slate-400 w-5 text-center tabular-nums">
-                      {rank}
+                      {rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank}
                     </span>
-                    <Avatar src={user.avatar} name={user.name} className="w-8 h-8" />
+                    {rank <= 3 ? <GlowAvatar rank={rank as 1 | 2 | 3} src={user.avatar} name={user.name} size={36} /> : <Avatar src={user.avatar} name={user.name} className="w-8 h-8" />}
                     <div className="truncate max-w-[150px]">
                       <div className="font-semibold text-xs text-white truncate">
-                        {user.name}
+                        {user.name}{champs[user.id]?.gold ? ` 🏆×${champs[user.id].gold}` : ''}
                       </div>
                       <div className="text-[10px] text-slate-400">
                         {user.level} · {user.streak} kun streak
@@ -300,6 +336,7 @@ export const LeaderboardTab: React.FC = () => {
         </div>
       )}
 
+      {activeSubTab === 'hall' && <HallOfHistory onBack={() => setActiveSubTab('league')} />}
       {activeSubTab === 'duel' && <DuelTab />}
       {activeSubTab === 'challenge' && <ChallengesTab />}
 
@@ -343,6 +380,19 @@ export const LeaderboardTab: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* Adminga xabar */}
+          <button
+            type="button"
+            onClick={() => { triggerHaptic('light'); setMsgInfo(null); setShowMsg(true); }}
+            className="w-full p-3.5 rounded-2xl bg-sky-500/10 border border-sky-500/30 flex items-center gap-3 text-left active:scale-[0.99] transition-all"
+          >
+            <MessageSquare className="w-5 h-5 text-sky-400 shrink-0" />
+            <span className="flex-1">
+              <span className="block text-sm font-bold text-white">Adminga xabar yozish</span>
+              <span className="block text-[11px] text-slate-400">Savol, muammo yoki taklifingizni yuboring</span>
+            </span>
+          </button>
 
           {/* Sertifikatlar */}
           <div className="space-y-2">
@@ -419,6 +469,34 @@ export const LeaderboardTab: React.FC = () => {
       )}
 
       {/* Settings Modal (O'ng tepadagi sozlamalar) */}
+      {showMsg && (
+        <div className="fixed inset-0 z-[115] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-3" onClick={() => setShowMsg(false)}>
+          <div className="w-full max-w-md rounded-3xl bg-[#151C28] border border-slate-700 p-4 space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-extrabold text-white flex items-center gap-2"><MessageSquare className="w-4 h-4 text-sky-400" /> Adminga xabar</h3>
+              <button type="button" onClick={() => setShowMsg(false)} className="w-8 h-8 rounded-lg bg-[#0E1524] border border-slate-800 flex items-center justify-center" aria-label="Yopish"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {([['savol', '❓ Savol'], ['muammo', '🐞 Muammo'], ['taklif', '💡 Taklif'], ['boshqa', '💬 Boshqa']] as [MsgKind, string][]).map(([k, l]) => (
+                <button key={k} type="button" onClick={() => setMsgKind(k)} className={`py-2 rounded-xl text-[11px] font-bold border transition-all ${msgKind === k ? 'bg-amber-500 text-slate-950 border-amber-400' : 'bg-[#0E1524] text-slate-300 border-slate-800'}`}>{l}</button>
+              ))}
+            </div>
+            <textarea
+              value={msgText}
+              onChange={e => setMsgText(e.target.value.slice(0, 800))}
+              rows={5}
+              placeholder="Xabaringizni yozing…"
+              className="w-full bg-[#0E1524] border border-slate-700 rounded-2xl px-3.5 py-3 text-sm text-white focus:outline-none focus:border-amber-500 resize-none"
+            />
+            <div className="flex items-center justify-between text-[11px] text-slate-500"><span>Xabar ismingiz va vaqti bilan adminga boradi</span><span>{msgText.length}/800</span></div>
+            {msgInfo && <div className={`rounded-xl p-2.5 text-xs font-semibold ${msgInfo.ok ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-300 border border-rose-500/30'}`}>{msgInfo.text}</div>}
+            <button type="button" disabled={msgBusy || msgText.trim().length < 3} onClick={submitMsg} className="w-full h-12 rounded-2xl bg-amber-500 disabled:opacity-50 text-slate-950 font-extrabold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
+              <Send className="w-4 h-4" /> {msgBusy ? 'Yuborilmoqda…' : 'Yuborish'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {showSettingsModal && (
         <div className="fixed inset-0 z-50 bg-[#0B0F17]/95 backdrop-blur-md flex flex-col justify-between p-4 max-w-md mx-auto">
           {/* Modal Header */}

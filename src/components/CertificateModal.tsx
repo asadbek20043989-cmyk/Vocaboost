@@ -92,7 +92,11 @@ export const CertificateModal: React.FC<{ cert: Certificate; onClose: () => void
           <button type="button" onClick={onClose} className="w-9 h-9 rounded-xl bg-[#151C28] border border-slate-800 flex items-center justify-center" aria-label="Yopish"><X className="w-4 h-4" /></button>
         </div>
         <canvas ref={ref} className="hidden" />
-        {url ? <img src={url} alt="Sertifikat" className="w-full rounded-2xl border border-amber-500/30" /> : <div className="aspect-[1754/1240] rounded-2xl bg-[#151C28] animate-pulse" />}
+        {url ? (
+          <img src={url} alt="Sertifikat" className={`w-full rounded-2xl border border-amber-500/30 ${cert.fmt === 'story' ? 'max-w-sm mx-auto' : ''}`} />
+        ) : (
+          <div className={`rounded-2xl bg-[#151C28] animate-pulse ${cert.fmt === 'story' ? 'aspect-[9/16] max-w-sm mx-auto' : 'aspect-[1754/1240]'}`} />
+        )}
         <p className="text-[11px] text-slate-400 text-center">
           {inTg ? 'Sertifikatingiz bot orqali Telegram chatingizga ham yuboriladi.' : 'Yuklab olinmasa, rasmni bosib turib saqlang.'}
         </p>
@@ -112,14 +116,19 @@ export const CertificateModal: React.FC<{ cert: Certificate; onClose: () => void
             const origin = typeof window !== 'undefined' ? window.location.origin : '';
             const certImageUrl = `${origin}/.netlify/functions/cert?id=${encodeURIComponent(cert.id)}&image=1`;
 
-            // Rasmni server keshiga yuborish (Stories yuklab olishi uchun)
+            // Stories uchun HAR DOIM 9:16 (tik) rasm tayyorlanadi — kichrayib qolmaydi. Server keshiga bitta sertifikat uchun
+            // FAQAT BIR MARTA yuboriladi (qayta bosilganda Netlify funksiyasi va Firebase yozuvi sarflanmaydi).
             try {
-              const imageB64 = await certificateBase64(cert);
-              fetch('/.netlify/functions/cert', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'storeImage', id: cert.id, image: imageB64 }),
-              }).catch(() => {});
+              const flag = `vb_story_up_${cert.id}`;
+              if (!localStorage.getItem(flag)) {
+                const imageB64 = await certificateBase64({ ...cert, fmt: 'story' });
+                const rr = await fetch('/.netlify/functions/cert', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'storeImage', id: cert.id, image: imageB64 }),
+                });
+                if (rr.ok) localStorage.setItem(flag, '1');
+              }
             } catch {
               /* ignore */
             }

@@ -22,14 +22,13 @@ import { mergeGames, GameDef } from '../data/games';
 import { newEntry, applyResult, MASTER_DAYS } from '../services/srs';
 import { subscribe, patch, put, realtimeEnabled, getJson, removePath } from '../services/realtime';
 import { nowMs, todayKey, dayDiff, syncClock } from '../services/time';
-import { claimCertificate, claimWelcomeCertificate } from '../services/certApi';
+import { claimCertificate, claimWelcomeCertificate, claimAward } from '../services/certApi';
 import { ACCOUNT_ID, lsGet, lsSet, lsDel } from '../services/account';
 
 // ---- Netlify kreditini tejash sozlamalari ----
 // Har bir bazaga yozish Netlify funksiyasi (db.mjs) chaqiruvi hisoblanadi, shuning uchun yozuvlar jamlanadi.
 const SYNC_DEBOUNCE_MS = 20000; // holat sinxronlash: oxirgi o'zgarishdan 20 soniya keyin (avval 1.5 soniya)
 const LB_THROTTLE_MS = 45000; // reytingga yozish: ko'pi bilan 45 soniyada bir marta (avval har o'zgarishda)
-const GRANTS_EVERY_MS = 60 * 60 * 1000; // admin sovg'alarini tekshirish: soatiga bir marta (avval 5 daqiqada)
 import {
   CoreState, CloudCore, mergeCore, mergeSrs, normalizeCore, coreSig, srsSig,
   parseRemoteCore, parseRemoteSrs,
@@ -141,6 +140,8 @@ interface AppContextType {
   challengesLive: boolean;
   realtimeOn: boolean;
   announcement: { text: string; active: boolean } | null;
+  /** Joriy liga haftasi (admin «Yangi hafta» bosganda oshadi) */
+  leagueWeek: { week: number; startedAt: number } | null;
   // sertifikatlar
   certificates: Certificate[];
   certificateView: Certificate | null;
@@ -569,6 +570,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ? { text: String(config.announcement.text), active: true }
       : null;
 
+  const leagueWeek = config?.league && Number(config.league.week) > 0 ? { week: Number(config.league.week), startedAt: Number(config.league.startedAt) || 0 } : null;
+
 // ---------- qurilmalar o'rtasida sinxronlash (telefon <-> noutbuk) ----------
   // Butun progress bulutda `state/<hisob>` ostida saqlanadi. Qurilmalar bir-birining ma'lumotini ustiga yozmaydi:
   // har bir maydon o'z qoidasi bilan BIRLASHTIRILADI (services/sync.ts). Shu sababli baraban, XP, so'zlar,
@@ -916,22 +919,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       grantsBusy.current = false;
     }
   };
+  // Netlify kreditini tejash: sovg'ani tekshirish funksiyasi FAQAT admin sovg'a yuborganida (reytingdagi `hasGrant` bayrog'i)
+  // chaqiriladi. Soatiga bir marta so'rov yuborish bekor qilindi. Yangilanishdan keyingi birinchi kirishda bitta tekshiruv bor
+  // (eski, bayroqsiz sovg'alar yo'qolmasligi uchun).
+  const grantsBoot = useRef(false);
   useEffect(() => {
     if (!realtimeEnabled || !syncReady || !profile.hasCompletedOnboarding) return;
-    let lastClaim = Date.now();
-    const run = () => {
-      lastClaim = Date.now();
+    if (leagueRaw === null && !grantsBoot.current) {
+      const t = setTimeout(() => setGrantsReady(true), 6000); // reyting kelmasa ham ilova to'xtab qolmaydi
+      return () => clearTimeout(t);
+    }
+    const flagged = leagueRaw?.[myId.current]?.hasGrant === true;
+    const firstEver = !lsGet('lx_grants_boot_v2');
+    if (flagged || (firstEver && !grantsBoot.current)) {
+      grantsBoot.current = true;
+      lsSet('lx_grants_boot_v2', '1');
       claimGrants();
-    };
-    run();
-    const id = setInterval(run, GRANTS_EVERY_MS);
-    const vis = () => document.visibilityState === 'visible' && Date.now() - lastClaim > 30 * 60 * 1000 && run();
-    document.addEventListener('visibilitychange', vis);
-    return () => {
-      clearInterval(id);
-      document.removeEventListener('visibilitychange', vis);
-    };
-  }, [syncReady, profile.hasCompletedOnboarding]);
+    } else {
+      grantsBoot.current = true;
+      setGrantsReady(true);
+    }
+  }, [syncReady, profile.hasCompletedOnboarding, leagueRaw]);
 
   // Eski "XP ofseti" (admin XP ni o'zgartirganda ishlatilgan) ni haqiqiy XP ga aylantiramiz: shundan keyin
   // foydalanuvchi yig'gan XP Ligada darhol ko'rinadi.
@@ -1218,6 +1226,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id, tpl: String(c.tpl || 'gold'), title: String(c.title || 'Maxsus sertifikat'),
       reason: c.reason ? String(c.reason) : undefined, name: String(c.name || profile.name),
       date: String(c.date || '').slice(0, 10), special: !c.auto, verified: true, delivered: !!c.sent,
+      fmt: c.fmt === 'story' ? 'story' : 'wide', stats: c.stats && typeof c.stats === 'object' ? c.stats : undefined,
     }));
   const certificates = [...cloudCerts, ...localCerts].sort((a, b) => (a.date < b.date ? 1 : -1));
 
@@ -1287,7 +1296,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (seen.size > fresh.length || lsGet('lx_certs_init_v1')) {
         pushNotice(first.auto ? '🎓 Tabriklaymiz! Yangi sertifikat oldingiz' : '🎓 Sizga maxsus sertifikat berildi!');
         sfx.win(true);
-        setTimeout(() => setCertificateView({ id: fresh[0], tpl: String(first.tpl || 'gold'), title: String(first.title || ''), reason: first.reason, name: String(first.name || profile.name), date: String(first.date || '').slice(0, 10), special: !first.auto, verified: true }), 600);
+        setTimeout(() => setCertificateView({ id: fresh[0], tpl: String(first.tpl || 'gold'), title: String(first.title || ''), reason: first.reason, name: String(first.name || profile.name), date: String(first.date || '').slice(0, 10), special: !first.auto, verified: true, fmt: first.fmt === 'story' ? 'story' : 'wide', stats: first.stats && typeof first.stats === 'object' ? first.stats : undefined }), 600);
       }
       lsSet('lx_certs_init_v1', '1');
     } else lsSet('lx_certs_init_v1', '1');
@@ -1324,7 +1333,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     if (!canUseBot() || !profile.hasCompletedOnboarding) return;
     const remind = profile.botRemind !== false;
-    const sig = `${today}|${remind}|${profile.level}|${profile.wordsPerDay}`;
+    // Netlify kreditini tejash: ro'yxatdan o'tkazish kuniga emas, 3 kunda bir marta (yoki sozlama o'zgarganda)
+    const sig = `${Math.floor(dayDiff('2024-01-01', today) / 3)}|${remind}|${profile.level}|${profile.wordsPerDay}`;
     if (load<string>('lx_reg_v1', '') === sig) return;
     botRegister({ remind, level: profile.level, wordsPerDay: profile.wordsPerDay })
       .then(() => save('lx_reg_v1', sig))
@@ -1450,6 +1460,76 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 8000);
     return () => clearTimeout(t);
   }, [profile.xp, savedWords.length, masteredCount, profile.name, shortAvatar, duelRaw, syncReady, now]);
+
+  // ---------- Qo'shimcha avtomatik sertifikatlar ----------
+  //   Barqaror (7/14/30 kun streak) · Bilim donosi (daraja tugatildi) · Tezkor (duel g'alabalari) · Mutaxassis (mavzuli to'plam)
+  // Har bir mezon uchun server faqat BIR MARTA sertifikat beradi; bajarilganlari qurilmada eslab qolinadi (ortiqcha so'rov yo'q).
+  const [duelWins, setDuelWins] = useState<number>(() => load<string[]>('lx_duelwins_v1', []).length);
+  const duelsSig = duels.map(d => `${d.code}:${nowMs() >= d.endsAt ? 1 : 0}:${d.players.length}:${d.players[0]?.id}:${d.players[0]?.gain}`).join('|');
+  useEffect(() => {
+    const me = myId.current;
+    const won = new Set<string>(load<string[]>('lx_duelwins_v1', []));
+    let changed = false;
+    duels.forEach(d => {
+      const top = d.players[0];
+      if (nowMs() >= d.endsAt && d.players.length >= 2 && top && top.id === me && top.gain > 0 && !won.has(d.code)) {
+        won.add(d.code);
+        changed = true;
+      }
+    });
+    if (changed) {
+      save('lx_duelwins_v1', Array.from(won));
+      setDuelWins(won.size);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [duelsSig]);
+
+  const awardBusy = useRef(false);
+  const awardFail = useRef<Record<string, number>>({});
+  const [awardTick, setAwardTick] = useState(0);
+  const awardCandidates = useMemo(() => {
+    type Cand = { kind: 'streak' | 'level' | 'duel' | 'pack'; key: string; n?: number; level?: string; title?: string };
+    const list: Cand[] = [];
+    [7, 14, 30].forEach(n => profile.streak >= n && list.push({ kind: 'streak', key: String(n), n }));
+    [10, 25, 50].forEach(n => duelWins >= n && list.push({ kind: 'duel', key: String(n), n }));
+    (['A1', 'A2', 'B1', 'B2+'] as const).forEach(L => {
+      const ws = mainBank.filter(w => w.level === L);
+      if (ws.length >= 20 && ws.every(w => srs[w.id]?.mastered)) list.push({ kind: 'level', key: L.replace('+', 'p'), level: L });
+    });
+    packs.forEach(p => {
+      if (p.kind === 'open' && p.words.length >= 5 && p.words.every(w => srs[w.id]?.mastered)) list.push({ kind: 'pack', key: p.id.slice(0, 30), title: p.title });
+    });
+    return list;
+  }, [profile.streak, duelWins, mainBank, packs, srs]);
+  useEffect(() => {
+    if (!realtimeEnabled || !syncReady || !profile.hasCompletedOnboarding || awardBusy.current || !awardCandidates.length) return;
+    const done = new Set<string>(load<string[]>('lx_awards_v1', []));
+    const nowT = Date.now();
+    const next = awardCandidates.find(c => !done.has(`${c.kind}_${c.key}`) && nowT - (awardFail.current[`${c.kind}_${c.key}`] || 0) > 120000);
+    if (!next) return;
+    awardBusy.current = true;
+    const k = `${next.kind}_${next.key}`;
+    const t = setTimeout(async () => {
+      try {
+        lsSet('lx_certs_init_v1', '1');
+        const r = await claimAward(myId.current, next.kind, next.key, { n: next.n, level: next.level, title: next.title, name: latest.current.profile.name });
+        if (r.id || r.revoked) {
+          done.add(k);
+          save('lx_awards_v1', Array.from(done));
+        } else awardFail.current[k] = Date.now();
+      } catch {
+        awardFail.current[k] = Date.now();
+      } finally {
+        awardBusy.current = false;
+        setAwardTick(n => n + 1);
+        if (awardFail.current[k]) setTimeout(() => setAwardTick(n => n + 1), 125000);
+      }
+    }, 4000);
+    return () => {
+      clearTimeout(t);
+      awardBusy.current = false;
+    };
+  }, [awardCandidates, syncReady, profile.hasCompletedOnboarding, awardTick]);
 
   const newDuelCode = () => Array.from({ length: 6 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join('');
   const myPlayer = (): Record<string, unknown> => ({
@@ -1747,7 +1827,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         goBack, canGoBack, packs, todayPacks, packProgress, customPacks, saveCustomPack, deleteCustomPack, duels, createDuel, joinDuel, leaveDuel, pendingDuelCode, clearPendingDuel: () => setPendingDuelCode(''), duelMetricValue, challenges, joinChallenge, openSurvival, saveSurvival, allWords: mainBank, introduceWord, reviewWord, addWord, isWordSaved, markWordReviewed, claimDailyBonus, completeGame, updateProfile, finishOnboarding,
         resetProgress, claimQuest, wheel: w, wheelPrizes: wheelCfg.prizes, wheelFreeSpins: wheelCfg.freeSpins,
         freeSpinsLeft, totalSpinsLeft, isPro, spinWheel, applyPrize, grantReferralSpin, leagueUsers, leagueLive, challengesLive,
-        realtimeOn: realtimeEnabled, announcement, certificates, certificateView, showCertificate: setCertificateView,
+        realtimeOn: realtimeEnabled, announcement, leagueWeek, certificates, certificateView, showCertificate: setCertificateView,
         notice, streakPopup, dismissStreakPopup, addXp, aiLeft, consumeAi, blitzLeft, consumeBlitz, markWritingDone, today, syncReady, accountId: myId.current, isTelegram, linkAccount,
       }}
     >

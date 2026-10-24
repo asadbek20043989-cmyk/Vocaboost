@@ -41,7 +41,7 @@ const AnnouncementBanner: React.FC<{ text: string }> = ({ text }) => {
   };
 
   return (
-    <div className="mb-3.5 p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-[#162133] to-sky-500/15 border-2 border-amber-400/40 shadow-lg shadow-amber-500/10 text-xs text-slate-100 relative overflow-hidden">
+    <div className="vb-announce mb-3.5 p-3.5 rounded-2xl border-2 border-amber-400/40 shadow-lg shadow-amber-500/10 text-xs text-slate-100 relative overflow-hidden">
       <div className="flex items-center gap-2 mb-1.5">
         <span className="px-2 py-0.5 rounded-md bg-amber-400/25 text-amber-300 font-extrabold text-[10px] tracking-wider uppercase border border-amber-400/40 flex items-center gap-1">
           <Megaphone className="w-3 h-3 text-amber-400 shrink-0" />

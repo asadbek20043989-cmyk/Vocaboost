@@ -4,7 +4,7 @@
 //   FIREBASE_DB_URL       — https://<project>-default-rtdb.firebaseio.com
 //   FIREBASE_DB_SECRET    — Realtime Database "Database secret" (Project settings > Service accounts > Database secrets)
 import { timingSafeEqual } from 'node:crypto';
-import { tgApi, sendMessage, sendPhoto, openAppMarkup, makeStartMarkup, makeCustomButtonsMarkup, siteUrl, issueCertificate, DEFAULT_START_TEXT, DEFAULT_START_BUTTON } from '../lib/tg.mjs';
+import { tgApi, sendMessage, sendPhoto, openAppMarkup, makeStartMarkup, makeCustomButtonsMarkup, siteUrl, issueCertificate, statsFromLb, CERT_TPLS, DEFAULT_START_TEXT, DEFAULT_START_BUTTON, tashkentDay } from '../lib/tg.mjs';
 
 const json = (status, body) => ({
   statusCode: status,
@@ -75,6 +75,13 @@ export const handler = async event => {
     return res.json();
   };
 
+  // Foydalanuvchi reyting yozuviga «sovg'a bor» bayrog'i (yozuv mavjud bo'lsagina; bo'sh yozuv yaratilmaydi)
+  const flagGrant = async uid => {
+    try {
+      if (await call('GET', `leaderboard/${uid}/ts`)) await call('PATCH', `leaderboard/${uid}`, { hasGrant: true });
+    } catch { /* bayroq muhim emas: ilova birinchi ochilishda baribir tekshiradi */ }
+  };
+
   try {
     switch (body.action) {
       case 'ping':
@@ -115,18 +122,113 @@ export const handler = async event => {
         return json(200, { ok: true });
       }
 
+      // Haftalik ligani yangilash: TOP-20 natijalari «Tarix zali»ga QOTIRIB saqlanadi (keyin o'zgarmaydi),
+      // so'ngra hammaning liga XP si 0 ga tushiriladi va yangi hafta boshlanadi.
       case 'resetLeague': {
         const lb = (await call('GET', 'leaderboard')) || {};
+        const league = (await call('GET', 'config/league')) || {};
+        const week = Math.max(1, Math.round(Number(league.week) || 1)); // yakunlanayotgan hafta raqami
+        const hallId = 'w' + String(week).padStart(4, '0');
+        if (await call('GET', `hall/${hallId}/week`)) return json(400, { error: `${week}-hafta allaqachon Tarix zaliga yozilgan (qayta yozib bo'lmaydi). Sahifani yangilang.` });
+
+        const shownOf = e => Math.max(0, (Number(e?.xp) || 0) + (Number(e?.xpOffset) || 0));
+        const ranked = Object.entries(lb)
+          .filter(([, e]) => e && !e.deleted && !e.hidden && shownOf(e) > 0)
+          .map(([uid, e]) => ({ uid, e, xp: shownOf(e) }))
+          .sort((a, b) => b.xp - a.xp || (Number(a.e.ts) || 0) - (Number(b.e.ts) || 0))
+          .slice(0, 20);
+        const top = ranked.map((r, i) => ({
+          place: i + 1,
+          uid: r.uid,
+          name: String(r.e.name || "O'quvchi").slice(0, 40),
+          avatar: typeof r.e.avatar === 'string' && !r.e.avatar.startsWith('data:') ? r.e.avatar.slice(0, 300) : '',
+          xp: r.xp,
+          streak: Number(r.e.streak) || 0,
+          level: String(r.e.level || '').slice(0, 4),
+        }));
+        const totalPlayers = Object.values(lb).filter(e => e && !e.deleted && shownOf(e) > 0).length;
+        const endedAt = Date.now();
+        if (top.length) {
+          await call('PUT', `hall/${hallId}`, { week, startedAt: Number(league.startedAt) || 0, endedAt, date: tashkentDay(), players: totalPlayers, top });
+        }
+
+        // Ixtiyoriy mukofotlar: TOP-3 ga baraban aylantirishlari, 1-o'ringa «Hafta chempioni» sertifikati
+        let rewarded = 0;
+        if (body.rewardSpins) {
+          const spins = [5, 3, 2];
+          for (let i = 0; i < Math.min(3, ranked.length); i++) {
+            await call('PUT', `grants/${ranked[i].uid}/${newGid()}`, { type: 'spins', amount: spins[i], validHours: 72, note: `${week}-hafta ligasi: ${i + 1}-o'rin`, ts: Date.now() });
+            await flagGrant(ranked[i].uid);
+            rewarded++;
+          }
+        }
+        if (body.rewardCert && ranked[0]) {
+          await issueCertificate(call, {
+            userId: ranked[0].uid, tpl: 'champion', title: `${week}-hafta ligasi g'olibi`, reason: `${ranked[0].xp} XP bilan haftaning eng kuchli o'quvchisi bo'ldi`,
+            name: top[0].name, fmt: body.certFmt === 'story' ? 'story' : 'wide', stats: statsFromLb(ranked[0].e),
+          });
+          rewarded++;
+        }
+
         const upd = {};
         for (const [id, e] of Object.entries(lb)) {
-          const shown = Math.max(0, (Number(e?.xp) || 0) + (Number(e?.xpOffset) || 0));
+          const shown = shownOf(e);
           upd[`${id}/xp`] = 0; // hamma uchun XP 0 dan boshlanadi
           upd[`${id}/xpOffset`] = 0;
           upd[`${id}/adj`] = (Number(e?.adj) || 0) - shown; // foydalanuvchining o'z hisobi ham 0 dan boshlanadi (farq sifatida)
           upd[`${id}/adjV`] = (Number(e?.adjV) || 0) + 1;
         }
         if (Object.keys(upd).length) await call('PATCH', 'leaderboard', upd);
-        return json(200, { ok: true, count: Object.keys(upd).length / 4 });
+        await call('PUT', 'config/league', { week: week + 1, startedAt: endedAt });
+        return json(200, { ok: true, count: Object.keys(upd).length / 4, week, archived: top.length, rewarded });
+      }
+
+      // Tarix zali (admin ko'rishi uchun)
+      case 'listHall': {
+        const h = (await call('GET', 'hall')) || {};
+        const items = Object.entries(h).map(([id, v]) => ({ id, ...v })).sort((a, b) => (b.week || 0) - (a.week || 0));
+        const league = (await call('GET', 'config/league')) || {};
+        return json(200, { items, league });
+      }
+
+      // ---------- Foydalanuvchilarning adminga xabarlari ----------
+      case 'listMessages': {
+        const m = (await call('GET', 'messages')) || {};
+        const items = Object.entries(m).filter(([, v]) => v && v.text).map(([id, v]) => ({ id, ...v }));
+        items.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        return json(200, { items: items.slice(0, 300), unread: items.filter(x => !x.read).length });
+      }
+
+      case 'markMessage': {
+        if (!ID_RE.test(body.id || '')) return json(400, { error: 'ID xato' });
+        await call('PATCH', `messages/${body.id}`, { read: body.read !== false });
+        return json(200, { ok: true });
+      }
+
+      case 'deleteMessage': {
+        if (!ID_RE.test(body.id || '')) return json(400, { error: 'ID xato' });
+        await call('DELETE', `messages/${body.id}`);
+        return json(200, { ok: true });
+      }
+
+      // Foydalanuvchiga bot orqali javob yozish
+      case 'replyMessage': {
+        if (!ID_RE.test(body.id || '')) return json(400, { error: 'ID xato' });
+        const text = String(body.text || '').trim().slice(0, 1500);
+        if (!text) return json(400, { error: 'Javob matnini yozing' });
+        const msg = await call('GET', `messages/${body.id}`);
+        if (!msg) return json(404, { error: 'Xabar topilmadi' });
+        let sent = false;
+        if (process.env.BOT_TOKEN && /^tg_\d+$/.test(String(msg.uid || ''))) {
+          try {
+            await sendMessage(process.env.BOT_TOKEN, Number(msg.uid.slice(3)), `✉️ Admin javobi:\n\n${text}`, openAppMarkup(), null);
+            sent = true;
+          } catch (e) {
+            return json(502, { error: `Telegram: ${e.message} (foydalanuvchi botga Start bosmagan bo'lishi mumkin)` });
+          }
+        }
+        await call('PATCH', `messages/${body.id}`, { read: true, reply: text, repliedAt: Date.now() });
+        return json(200, { ok: true, sent });
       }
 
       case 'setDaily': {
@@ -232,6 +334,11 @@ export const handler = async event => {
             skipActive: v.skipActive !== false,
           });
           return json(200, { ok: true });
+        }
+        if (key === 'wheel') {
+          // VIP foizi: bo'sh = og'irlik bo'yicha, aks holda 0–100 oralig'ida aniq foiz
+          const raw = v.vipPercent;
+          v.vipPercent = raw === null || raw === undefined || raw === '' || !Number.isFinite(Number(raw)) ? null : Math.min(100, Math.max(0, Math.round(Number(raw) * 10) / 10));
         }
         await call('PUT', `config/${key}`, v);
         return json(200, { ok: true });
@@ -367,6 +474,8 @@ export const handler = async event => {
           title: t,
           reason: String(reason || '').trim().slice(0, 200),
           name: String(name || user?.name || "O'quvchi").trim().slice(0, 40),
+          fmt: body.fmt === 'story' ? 'story' : 'wide', // admin tanlaydi: 9:16 yoki 16:9
+          stats: statsFromLb(user),
         });
         const id = issued.id;
         // Telegram foydalanuvchisiga bot orqali xabar (rasm esa ilova ochilganda avtomatik yuboriladi)
@@ -429,6 +538,7 @@ export const handler = async event => {
         // Aylantirish sovg'asi amal qilish muddati (soat): 0 — foydalanilguncha. Boshqa turlar uchun ahamiyatsiz.
         const validHours = type === 'spins' ? Math.max(0, Math.min(24 * 60, Math.round(Number(body.validHours ?? 24) || 0))) : 0;
         await call('PUT', `grants/${userId}/${newGid()}`, { type, amount: n, validHours, note: String(note || '').slice(0, 80), ts: Date.now() });
+        await flagGrant(userId); // ilova faqat shu bayroq bo'lsagina serverga so'rov yuboradi (Netlify krediti tejaladi)
         return json(200, { ok: true });
       }
 
@@ -609,10 +719,11 @@ export const handler = async event => {
           const t = T[key] || {};
           const title = fill(t.title || DEF[key][0], r, place).slice(0, 100);
           const reason = fill(t.reason || DEF[key][1], r, place).slice(0, 200);
-          const issued = await issueCertificate(call, { userId: r.uid, tpl: key === 'marathon' ? 'marathon' : key === 'thanks' ? 'thanks' : key, title, reason, name: r.name });
+          const issued = await issueCertificate(call, { userId: r.uid, tpl: key === 'marathon' ? 'marathon' : key === 'thanks' ? 'thanks' : key, title, reason, name: r.name, stats: statsFromLb(lb[r.uid]) });
           await call('PUT', `challenges/${body.id}/certIssued/${r.uid}`, { id: issued.id, tpl: key });
           if (place <= 3 && key !== 'marathon' && key !== 'thanks' && m.xpTop > 0) {
             await call('PUT', `grants/${r.uid}/${newGid()}`, { type: 'xp', amount: m.xpTop, validHours: 0, note: `${m.title}: ${place}-o'rin`, ts: Date.now() });
+            await flagGrant(r.uid);
           }
           out.push({ uid: r.uid, place, tpl: key, id: issued.id });
         };
@@ -633,7 +744,7 @@ export const handler = async event => {
         for (const [uid, x] of Object.entries(issued)) {
           const c = await call('GET', `certs/${uid}/${x.id}`);
           if (!c) continue;
-          items.push({ uid, id: x.id, tpl: c.tpl, title: c.title || '', reason: c.reason || '', name: c.name || '', date: c.date || '', sent: !!c.sent, tg: /^tg_\d+$/.test(uid) });
+          items.push({ uid, id: x.id, tpl: c.tpl, title: c.title || '', reason: c.reason || '', name: c.name || '', date: c.date || '', fmt: c.fmt || (c.tpl === 'thanks' ? 'story' : 'wide'), stats: c.stats || null, sent: !!c.sent, tg: /^tg_\d+$/.test(uid) });
         }
         items.sort((a, b) => (a.id < b.id ? -1 : 1));
         return json(200, { items });
@@ -666,7 +777,6 @@ export const handler = async event => {
           return json(200, { ok: false, error: forbidden ? 'Bot foydalanuvchiga yoza olmaydi (Start bosmagan)' : String(e.message || e) });
         }
         await call('PATCH', `certs/${body.userId}/${body.id}`, { sent: true });
-        await call('PUT', `certImages/${body.id}`, { b64, ts: Date.now() }).catch(() => {});
         return json(200, { ok: true });
       }
 

@@ -92,6 +92,8 @@ export interface Certificate {
   date: string; // YYYY-MM-DD
   special: boolean; // admin yuborgan
   delivered?: boolean; // admin paneldan Telegram chatiga allaqachon yuborilgan
+  fmt?: 'wide' | 'story'; // 'wide' = 16:9 (albom), 'story' = 9:16 (Telegram Stories uchun tik)
+  stats?: { lvl?: string; words?: number; streak?: number }; // sertifikat pastidagi muhrlar (daraja, so'zlar, streak)
 }
 
 export interface UserProfile {

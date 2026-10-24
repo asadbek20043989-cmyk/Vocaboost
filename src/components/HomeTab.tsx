@@ -6,7 +6,7 @@ import { triggerHaptic } from '../services/telegram';
 import { LuckyWheel } from './LuckyWheel';
 import { WordMap } from './WordMap';
 import { VocabStory } from './Learning';
-import { nowMs } from '../services/time';
+import { nowMs, todayKey, addDays, dayDiff } from '../services/time';
 
 
 /** 3D uslubidagi sovg'a qutisi */
@@ -146,9 +146,14 @@ export const HomeTab: React.FC = () => {
         </div>
         <div className="grid grid-cols-7 gap-1.5 text-center">
           {['Du', 'Se', 'Ch', 'Pa', 'Ju', 'Sh', 'Ya'].map((d, i) => {
-            const isToday = (new Date().getDay() + 6) % 7 === i;
-            const isPast = (new Date().getDay() + 6) % 7 >= i;
-            const active = isPast && profile.streak > 0;
+            // Haqiqiy faol kunlar: oxirgi mashq kunidan orqaga qarab `streak` kun (Toshkent vaqti bo'yicha, hafta Dushanbadan boshlanadi)
+            const todayK = todayKey();
+            const todayIdx = (new Date(todayK + 'T00:00:00Z').getUTCDay() + 6) % 7;
+            const dayKey = addDays(todayK, i - todayIdx);
+            const last = profile.lastReadDate || '';
+            const span = profile.streak > 0 && last ? dayDiff(dayKey, last) : -1; // oxirgi mashq shu kundan necha kun keyin
+            const active = profile.streak > 0 && !!last && span >= 0 && span < profile.streak && dayKey <= last;
+            const isToday = i === todayIdx;
             return (
               <div key={d} className={`py-2 px-1 rounded-xl border flex flex-col items-center gap-1 transition-all ${isToday ? 'bg-amber-500/20 border-amber-400 text-amber-300 font-extrabold shadow-sm shadow-amber-500/20' : active ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400' : 'bg-[#18202F] border-slate-800 text-slate-500'}`}>
                 <span className="text-[10px]">{d}</span>

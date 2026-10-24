@@ -32,6 +32,8 @@ export const handler = async event => {
       out.push({ id: gid, type: g.type, amount: Number(g.amount) || 0, validHours: Number(g.validHours) || 0, note: g.note || '' });
     }
     out.sort((a, b) => (a.id < b.id ? -1 : 1));
+    // Bayroqni o'chiramiz: ilova keyingi safar bu funksiyani chaqirmaydi (kredit tejash)
+    await db('PATCH', `leaderboard/${uid}`, { hasGrant: false }).catch(() => {});
     return json(200, { grants: out });
   } catch (e) {
     return json(500, { error: String(e.message || e) });

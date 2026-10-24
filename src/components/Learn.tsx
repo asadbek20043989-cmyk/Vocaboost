@@ -272,8 +272,8 @@ export const QuestionView: React.FC<{ q: Question; onDone: (correct: boolean) =>
               <div className={`font-bold ${result.ok ? 'text-emerald-300' : 'text-rose-300'}`}>
                 {result.ok ? (result.close ? "To'g'ri (kichik xato bilan)" : "To'g'ri!") : "Noto'g'ri"}
               </div>
-              <div className="text-slate-300 text-xs mt-0.5">
-                <b>{q.word.en}</b> — {q.word.uz}
+              <div className={`text-slate-300 mt-0.5 ${q.kind === 'listen' ? 'text-base' : 'text-xs'}`}>
+                {q.kind === 'listen' ? <span className="font-extrabold text-white text-xl block leading-tight">{q.word.en} — {q.word.uz}</span> : <><b>{q.word.en}</b> — {q.word.uz}</>}
                 {q.word.hook && !result.ok ? <div className="mt-1 text-amber-200">💡 {q.word.hook}</div> : null}
               </div>
             </div>
@@ -325,6 +325,11 @@ export const LearnSession: React.FC = () => {
   const [retried, setRetried] = useState<Set<string>>(new Set());
   const [stats, setStats] = useState({ ok: 0, total: 0, xp: 0, newCount: 0 });
   const [bonus, setBonus] = useState(0);
+  // Mini-testda xato qilingan so'zlar paket oxirida TO'G'RI topilguncha qayta so'raladi
+  const [qFailed, setQFailed] = useState<BankWord[]>([]);
+  const [qQueue, setQQueue] = useState<BankWord[]>([]);
+  const [qRetry, setQRetry] = useState(false);
+  const [qNonce, setQNonce] = useState(0);
 
   const batch = batches[bi] || [];
   const totalSteps = plan.news.length * 2 + plan.dues.length;
@@ -336,7 +341,11 @@ export const LearnSession: React.FC = () => {
     setPhase('done');
   };
 
-  const quizQ = useMemo(() => (phase === 'quiz' && batch[qi] ? makeQuestion(batch[qi], bank, 'mcq') : null), [phase, bi, qi]);
+  const quizQ = useMemo(() => {
+    if (phase !== 'quiz') return null;
+    if (qRetry) return qQueue[0] ? makeQuestion(qQueue[0], bank, qNonce % 2 ? 'rev' : 'mcq') : null;
+    return batch[qi] ? makeQuestion(batch[qi], bank, 'mcq') : null;
+  }, [phase, bi, qi, qRetry, qNonce]);
   const reviewQ = useMemo(() => {
     if (phase !== 'review' || !queue[0]) return null;
     const e = srs[queue[0].id];
@@ -344,7 +353,7 @@ export const LearnSession: React.FC = () => {
   }, [phase, queue[0]?.id, queue.length]);
 
   return (
-    <Shell title={pack ? pack.title : "Bugungi mashq"} sub={phase === 'learn' ? "Yangi so'zlar" : phase === 'quiz' ? 'Mini-test' : phase === 'review' ? 'Takrorlash' : 'Natija'} progress={phase === 'done' ? 1 : totalSteps ? Math.min(1, doneSteps / totalSteps) : 0} onBack={closeOverlay}>
+    <Shell title={pack ? pack.title : "Bugungi mashq"} sub={phase === 'learn' ? "Yangi so'zlar" : phase === 'quiz' ? (qRetry ? 'Xatolarni takrorlash' : 'Mini-test') : phase === 'review' ? 'Takrorlash' : 'Natija'} progress={phase === 'done' ? 1 : totalSteps ? Math.min(1, doneSteps / totalSteps) : 0} onBack={closeOverlay}>
       {phase === 'learn' && batch[ci] && (
         <div className="space-y-4">
           <div className="text-xs text-slate-400 text-center">{ci + 1} / {batch.length} (paket {bi + 1}/{batches.length})</div>
@@ -365,15 +374,35 @@ export const LearnSession: React.FC = () => {
 
       {phase === 'quiz' && quizQ && (
         <QuestionView
-          key={`q-${bi}-${qi}`}
+          key={`q-${bi}-${qi}-${qRetry ? 'r' + qNonce : 'n'}`}
           q={quizQ}
           onDone={ok => {
+            const advance = () => {
+              setQRetry(false);
+              setQFailed([]);
+              setQQueue([]);
+              if (bi < batches.length - 1) { setBi(bi + 1); setCi(0); setQi(0); setPhase('learn'); }
+              else if (plan.dues.length) setPhase('review');
+              else finish();
+            };
+            if (qRetry) {
+              // Qayta so'rash: to'g'ri topilsa navbatdan chiqadi, xato bo'lsa — oxiriga qaytadi (XP/SRS ga ta'sir qilmaydi)
+              const w = qQueue[0];
+              const rest = qQueue.slice(1);
+              if (ok) {
+                if (rest.length) { setQQueue(rest); setQNonce(n => n + 1); } else advance();
+              } else {
+                setQQueue([...rest, w]);
+                setQNonce(n => n + 1);
+              }
+              return;
+            }
             const xp = introduceWord(quizQ.word, ok);
             setStats(s => ({ ok: s.ok + (ok ? 1 : 0), total: s.total + 1, xp: s.xp + xp, newCount: s.newCount + 1 }));
-            if (qi < batch.length - 1) setQi(qi + 1);
-            else if (bi < batches.length - 1) { setBi(bi + 1); setCi(0); setQi(0); setPhase('learn'); }
-            else if (plan.dues.length) setPhase('review');
-            else finish();
+            const failed = ok ? qFailed : [...qFailed, quizQ.word];
+            if (qi < batch.length - 1) { setQFailed(failed); setQi(qi + 1); }
+            else if (failed.length) { setQFailed(failed); setQQueue(failed); setQRetry(true); setQNonce(n => n + 1); }
+            else advance();
           }}
         />
       )}

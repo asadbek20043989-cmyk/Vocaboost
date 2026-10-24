@@ -49,7 +49,7 @@ export function syncClock(): Promise<void> {
     } catch {
       /* oflayn: qurilma soati ishlatiladi */
     } finally {
-      setTimeout(() => (syncing = null), 10 * 60 * 1000);
+      // Netlify kreditini tejash: soat bitta sessiyada FAQAT 1 marta sinxronlanadi (qayta so'rov yo'q)
     }
   })();
   return syncing;

@@ -1,14 +1,21 @@
-// Talaffuz (v4.6.2). Manbalar ketma-ketligi (birinchisi ishlamasa keyingisiga tez o'tiladi):
-//  1) Yakka so'z uchun — haqiqiy INSON ovozi yozuvi (Free Dictionary API, bepul, natural talaffuz)
-//  2) Serverdagi neyral ovoz (Netlify /tts, Microsoft Edge)
-//  3) Brauzerning o'z ovozi (en-US) — eng so'nggi zaxira
+// Talaffuz (v4.7). NETLIFY KREDITI = 0: hamma manba to'g'ridan-to'g'ri brauzerdan ishlaydi (server funksiyasi chaqirilmaydi).
+// Manbalar ketma-ketligi (birinchisi ishlamasa keyingisiga tez o'tiladi):
+//  1) Yakka so'z: haqiqiy INSON ovozi yozuvi (Free Dictionary API)
+//  2) Yakka so'z: Wikimedia Commons'dagi inson yozuvi (En-us-<so'z>.ogg)
+//  3) Sifatli brauzer/tizim ovozi (Natural/Neural/Google/Siri — robotga o'xshamaydi)
+//  4) Google Translate TTS (to'g'ridan-to'g'ri, ibora va gaplar uchun)
+//  5) Har qanday brauzer ovozi — eng so'nggi zaxira
+// Eski Netlify /tts faqat VITE_SERVER_TTS=1 qo'yilsa ishlaydi (standart: o'chiq).
 // Shadowing uchun: Web Speech API SpeechRecognition (bepul).
 
 const TTS_URL: string = ((import.meta as any).env?.VITE_TTS_URL as string) || '/.netlify/functions/tts';
-const SERVER_TTS = String((import.meta as any).env?.VITE_SERVER_TTS ?? '1') !== '0';
+const SERVER_TTS = String((import.meta as any).env?.VITE_SERVER_TTS ?? '0') === '1';
 const TTS_VER = '2'; // eski (robot ovozli) keshlangan fayllarni almashtirish uchun
 const SERVER_TIMEOUT_MS = 7000; // yangi so'zning birinchi marta yaratilishi bir necha soniya olishi mumkin
 const HUMAN_TIMEOUT_MS = 4000;
+const WIKI_TIMEOUT_MS = 3000;
+const GTTS_TIMEOUT_MS = 5000;
+const GOOD_VOICE_SCORE = 70; // shu balldan yuqori brauzer ovozi "sifatli" hisoblanadi
 const DICT_URL = 'https://api.dictionaryapi.dev/api/v2/entries/en/';
 const WORD_RE = /^[A-Za-z][A-Za-z'’-]*$/;
 
@@ -251,38 +258,61 @@ function playUrl(url: string, rate: number, my: number, timeoutMs: number): Prom
   });
 }
 
+function hasGoodBrowserVoice(): boolean {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false;
+  if (!cachedVoice) loadVoices();
+  return !!cachedVoice && scoreVoice(cachedVoice) >= GOOD_VOICE_SCORE;
+}
+
+// Wikimedia Commons: ko'p uchraydigan so'zlar uchun inson yozuvi (topilmasa 404 -> keyingi manbaga o'tiladi)
+const wikiMiss = new Set<string>();
+const wikiUrl = (w: string) => `https://commons.wikimedia.org/wiki/Special:FilePath/En-us-${encodeURIComponent(w)}.ogg`;
+// Google Translate TTS (audio elementiga to'g'ridan-to'g'ri; Netlify ishtirok etmaydi)
+const gttsUrl = (t: string) => `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en-US&q=${encodeURIComponent(t.slice(0, 190))}`;
+
 export function speakEnglish(text: string, rate: number = 0.9): void {
   const clean = text.replace(/[*_#`~]/g, '').replace(/\s+/g, ' ').trim().slice(0, 300);
   if (!clean) return;
   stopSpeaking();
   const my = reqId; // stopSpeaking() hisoblagichni oshirdi — shu so'rovning raqami
   const isWord = WORD_RE.test(clean);
-  // Bitta so'z kichik harfga o'tkaziladi: bir xil URL = bir xil kesh
   const key = isWord ? clean.toLowerCase() : clean;
 
   (async () => {
-    // 1) Yakka so'z: haqiqiy inson yozuvi
+    // 1-2) Yakka so'z: haqiqiy inson yozuvlari
     if (isWord) {
       const url = await getHumanAudio(key);
       if (my !== reqId) return;
       if (url && (await playUrl(url, rate, my, HUMAN_TIMEOUT_MS))) return;
       if (my !== reqId) return;
+      if (!wikiMiss.has(key)) {
+        if (await playUrl(wikiUrl(key), rate, my, WIKI_TIMEOUT_MS)) return;
+        if (my !== reqId) return;
+        wikiMiss.add(key);
+      }
     }
-    // 2) Server neyral ovozi
-    if (SERVER_TTS && !failedKeys.has(key) && !serverCoolingDown()) {
+    // 3) Sifatli tizim ovozi bo'lsa — shuni ishlatamiz (tez, bepul, tabiiy)
+    if (hasGoodBrowserVoice()) {
+      browserSpeak(clean, rate, my);
+      return;
+    }
+    // 4) Google TTS (to'g'ridan-to'g'ri)
+    if (!failedKeys.has(key)) {
+      if (await playUrl(gttsUrl(clean), rate, my, GTTS_TIMEOUT_MS)) return;
+      if (my !== reqId) return;
+      failedKeys.add(key);
+    }
+    // (ixtiyoriy) Netlify neyral ovozi — standart o'chiq, kredit sarflamaslik uchun
+    if (SERVER_TTS && !serverCoolingDown()) {
       const ok = await playUrl(`${TTS_URL}?text=${encodeURIComponent(key)}&v=${TTS_VER}`, rate, my, SERVER_TIMEOUT_MS);
       if (my !== reqId) return;
-      if (ok) {
-        serverFails = 0;
-        return;
-      }
-      failedKeys.add(key);
+      if (ok) return;
       if (++serverFails >= 2) {
         startCooldown();
         serverFails = 0;
       }
     }
-    // 3) Brauzer ovozi
+    // 5) Har qanday brauzer ovozi
     browserSpeak(clean, rate, my);
   })().catch(() => {
     if (my === reqId) browserSpeak(clean, rate, my);

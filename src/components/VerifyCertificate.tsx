@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { BadgeCheck, ShieldX, Download, Loader2 } from 'lucide-react';
+import { BadgeCheck, ShieldX, Download, Loader2, Rocket } from 'lucide-react';
 import { Certificate } from '../types';
 import { fetchCertificate } from '../services/certApi';
-import { drawCertificate, certFileName, TEMPLATES } from '../services/certificate';
+import { drawCertificate, certFileName, TEMPLATES, CERT_BOT } from '../services/certificate';
 import { Logo, ThemeButton } from './Brand';
 
 /** QR kod skaner qilinganda ochiladigan ommaviy sahifa: sertifikat haqiqiyligini tekshiradi va uni ko'rsatadi */
@@ -66,13 +66,27 @@ export const VerifyCertificate: React.FC<{ id: string }> = ({ id }) => {
               </div>
             </div>
             <canvas ref={ref} className="hidden" />
-            {url ? <img src={url} alt={`Sertifikat ${cert.id}`} className="w-full rounded-2xl border border-slate-800" /> : <div className="aspect-[1754/1240] rounded-2xl bg-[#151C28] animate-pulse" />}
+            {url ? (
+              <img src={url} alt={`Sertifikat ${cert.id}`} className={`w-full rounded-2xl border border-slate-800 ${cert.fmt === 'story' ? 'max-w-sm mx-auto' : ''}`} />
+            ) : (
+              <div className={`rounded-2xl bg-[#151C28] animate-pulse ${cert.fmt === 'story' ? 'aspect-[9/16] max-w-sm mx-auto' : 'aspect-[1754/1240]'}`} />
+            )}
             <a
               href={url || undefined}
               download={certFileName(cert)}
               className={`w-full h-12 rounded-xl bg-amber-500 text-slate-950 font-bold text-sm flex items-center justify-center gap-2 ${url ? '' : 'opacity-60 pointer-events-none'}`}
             >
               <Download className="w-4 h-4" /> Yuklab olish
+            </a>
+            {/* Har bir QR skaneri — botning potensial yangi foydalanuvchisi */}
+            <a
+              href={`https://t.me/${CERT_BOT.replace(/^@/, '')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="keep-dark block rounded-2xl bg-gradient-to-r from-violet-600 via-pink-600 to-amber-500 p-4 text-center text-white shadow-lg shadow-pink-500/20 active:scale-[0.99] transition-all"
+            >
+              <div className="flex items-center justify-center gap-2 text-sm font-extrabold"><Rocket className="w-4 h-4" /> Siz ham o‘rganing va sertifikat oling!</div>
+              <div className="text-[11px] text-white/85 mt-1 leading-snug">🚀 VocaBoost&apos;da ingliz tilini o‘yinlar orqali o‘rganing va rasmiy sertifikat oling — botni ochish uchun bosing</div>
             </a>
           </>
         )}

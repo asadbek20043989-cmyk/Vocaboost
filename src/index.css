@@ -172,3 +172,66 @@ html.light input::placeholder, html.light textarea::placeholder { color: #94A3B8
 }
 .sp-pop { animation: sp-pop 0.28s ease-out both; }
 .sp-flame { display: inline-block; animation: sp-flame 1.6s ease-in-out infinite; }
+
+
+/* E'lon banneri: tun va kun rejimida alohida fon (oldin kun rejimida o'rtasi qora bo'lib qolardi) */
+.vb-announce { background: linear-gradient(90deg, rgb(245 158 11 / 0.16), #162133 50%, rgb(14 165 233 / 0.16)); }
+html.light .vb-announce { background: linear-gradient(90deg, #FEF3C7, #FFFBEB 50%, #E0F2FE); border-color: rgb(245 158 11 / 0.55); }
+
+/* Kun rejimida o'qilmay qolgan och rangli matnlar (to'q rangga o'tkaziladi) */
+html.light .text-rose-100 { color: #881337; }
+html.light .text-cyan-200 { color: #155E75; }
+html.light .text-cyan-400 { color: #0E7490; }
+html.light .text-sky-300\/80 { color: #0369A1; }
+html.light .text-amber-200\/90 { color: #92400E; }
+html.light .text-violet-100 { color: #5B21B6; }
+html.light .text-emerald-100 { color: #065F46; }
+html.light .text-amber-600 { color: #B45309; }
+html.light .text-orange-500 { color: #C2410C; }
+html.light .text-yellow-200, html.light .text-yellow-300 { color: #854D0E; }
+html.light .text-green-300, html.light .text-green-400 { color: #15803D; }
+html.light .text-red-300, html.light .text-red-400 { color: #B91C1C; }
+html.light .text-purple-100\/85 { color: #6B21A8; }
+/* Yarim shaffof rangli fonlar kun rejimida biroz kuchliroq bo'lsin */
+html.light .bg-rose-500\/10 { background-color: rgb(244 63 94 / 0.10); }
+html.light .bg-sky-500\/10 { background-color: rgb(14 165 233 / 0.10); }
+html.light .bg-amber-500\/10 { background-color: rgb(245 158 11 / 0.14); }
+html.light .bg-emerald-500\/10 { background-color: rgb(16 185 129 / 0.12); }
+
+
+/* =====================================================================
+   PODIUM: TOP-3 uchun porlovchi avatarlar, toj va yulduzchalar
+   ===================================================================== */
+@keyframes pd-spin { to { transform: rotate(360deg); } }
+@keyframes pd-pulse { 0%, 100% { opacity: .55; transform: scale(1); } 50% { opacity: 1; transform: scale(1.12); } }
+@keyframes pd-float { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-5px) rotate(4deg); } }
+@keyframes pd-twinkle { 0%, 100% { opacity: 0; transform: scale(.4) rotate(0deg); } 50% { opacity: 1; transform: scale(1) rotate(90deg); } }
+@keyframes pd-shine { 0% { transform: translateX(-120%) skewX(-20deg); } 60%, 100% { transform: translateX(260%) skewX(-20deg); } }
+.pd-wrap { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+.pd-halo { position: absolute; inset: -14px; border-radius: 9999px; filter: blur(14px); animation: pd-pulse 2.4s ease-in-out infinite; }
+.pd-ring { position: absolute; inset: -5px; border-radius: 9999px; animation: pd-spin 4s linear infinite; }
+.pd-ring::after { content: ''; position: absolute; inset: 3px; border-radius: 9999px; background: var(--pd-inner, #0B0F17); }
+.pd-avatar { position: relative; z-index: 2; border-radius: 9999px; }
+.pd-crown { position: absolute; left: 50%; top: 0; z-index: 5; transform: translate(-50%, -78%); animation: pd-float 2.6s ease-in-out infinite; filter: drop-shadow(0 4px 8px rgba(251,191,36,.7)); }
+.pd-spark { position: absolute; z-index: 4; width: 10px; height: 10px; animation: pd-twinkle 2.2s ease-in-out infinite; }
+.pd-spark::before, .pd-spark::after { content: ''; position: absolute; background: #fff; border-radius: 2px; left: 50%; top: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 6px 1px currentColor; }
+.pd-spark::before { width: 100%; height: 2px; }
+.pd-spark::after { width: 2px; height: 100%; }
+.pd-base { position: relative; overflow: hidden; }
+.pd-base::after { content: ''; position: absolute; top: 0; bottom: 0; width: 40%; background: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent); animation: pd-shine 3.4s ease-in-out infinite; }
+html.light { --pd-inner: #FFFFFF; }
+.pd-gold { --c1: #FDE047; --c2: #F59E0B; --c3: #FFF7C2; }
+.pd-silver { --c1: #E0F2FE; --c2: #38BDF8; --c3: #FFFFFF; }
+.pd-bronze { --c1: #FDBA74; --c2: #EA580C; --c3: #FFE4C7; }
+.pd-gold .pd-ring { background: conic-gradient(from 0deg, #FDE047, #F59E0B, #FFF7C2, #F59E0B, #FDE047); }
+.pd-silver .pd-ring { background: conic-gradient(from 0deg, #E0F2FE, #38BDF8, #FFFFFF, #7DD3FC, #E0F2FE); }
+.pd-bronze .pd-ring { background: conic-gradient(from 0deg, #FDBA74, #EA580C, #FFE4C7, #C2410C, #FDBA74); }
+.pd-gold .pd-halo { background: radial-gradient(circle, rgba(250,204,21,.85), rgba(245,158,11,0) 70%); }
+.pd-silver .pd-halo { background: radial-gradient(circle, rgba(56,189,248,.8), rgba(125,211,252,0) 70%); }
+.pd-bronze .pd-halo { background: radial-gradient(circle, rgba(249,115,22,.8), rgba(234,88,12,0) 70%); }
+.pd-gold .pd-spark { color: #FDE047; } .pd-silver .pd-spark { color: #7DD3FC; } .pd-bronze .pd-spark { color: #FB923C; }
+/* Reyting ro'yxatida TOP-3 qatorlarining yengil nuri */
+.row-gold { box-shadow: 0 0 0 1px rgba(250,204,21,.55), 0 0 18px rgba(250,204,21,.25); }
+.row-silver { box-shadow: 0 0 0 1px rgba(56,189,248,.5), 0 0 16px rgba(56,189,248,.2); }
+.row-bronze { box-shadow: 0 0 0 1px rgba(249,115,22,.5), 0 0 16px rgba(249,115,22,.2); }
+@media (prefers-reduced-motion: reduce) { .pd-halo, .pd-ring, .pd-crown, .pd-spark, .pd-base::after { animation: none !important; } }

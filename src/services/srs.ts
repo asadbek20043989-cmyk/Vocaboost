@@ -61,6 +61,7 @@ export interface Question {
   answer: string; // to'g'ri javob (matn)
   speak?: string;
   hint?: string;
+  ansLang?: 'en' | 'uz'; // «Eshitib toping»: variantlar inglizcha yoki o'zbekcha
 }
 
 export const shuffle = <T,>(arr: T[]): T[] => {
@@ -109,8 +110,13 @@ export const makeQuestion = (word: BankWord, bank: BankWord[], kind: QKind, choi
       return { kind, word, prompt: word.uz, options: opts, answer: word.en, hint: "Inglizchasini tanlang" };
     }
     case 'listen': {
+      // 50%: inglizcha yozuvini, 50%: o'zbekcha tarjimasini tanlash — faqat tovush o'xshashligidan topib ketib bo'lmaydi
+      if (Math.random() < 0.5) {
+        const opts = shuffle([word.uz, ...pickDistractors(word, bank, n, 'uz')]);
+        return { kind, word, prompt: "Eshiting va tarjimasini tanlang", options: opts, answer: word.uz, speak: word.en, ansLang: 'uz' };
+      }
       const opts = shuffle([word.en, ...pickDistractors(word, bank, n, 'en')]);
-      return { kind, word, prompt: 'Eshiting va to\'g\'ri so\'zni tanlang', options: opts, answer: word.en, speak: word.en };
+      return { kind, word, prompt: 'Eshiting va to\'g\'ri so\'zni tanlang', options: opts, answer: word.en, speak: word.en, ansLang: 'en' };
     }
     case 'gap': {
       const sentence = blankSentence(word);

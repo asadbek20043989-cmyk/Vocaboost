@@ -4,10 +4,14 @@ import { drawQr } from './qr';
 // Gorizontal (A4 albom) sertifikat. Har bir sertifikatda o'z QR kodi bor: skaner qilinsa, shu sertifikat sahifasi ochiladi.
 export const CERT_W = 1754;
 export const CERT_H = 1240;
+/** 9:16 (tik) format: Telegram Stories va telefon ekrani uchun */
+export const CERT_STORY_W = 1080;
+export const CERT_STORY_H = 1920;
 /** Har bir sertifikatning pastki o'rtasiga yoziladigan bot manzili */
 export const CERT_BOT = '@VocaBoostProBot';
-const W = CERT_W;
-const H = CERT_H;
+// O'lcham sertifikat formatiga qarab chizish paytida o'zgaradi (16:9 yoki 9:16)
+let W = CERT_W;
+let H = CERT_H;
 
 type Deco = 'bronze' | 'silver' | 'gold' | 'platinum' | 'champion' | 'active' | 'marathon' | 'thanks' | 'trust' | 'growth' | 'wisdom' | 'speed' | 'reviewer' | 'expert' | 'consistent' | 'limitless';
 
@@ -427,7 +431,43 @@ function loadLogo(): Promise<HTMLImageElement | null> {
   return logoPromise;
 }
 
-/** Sertifikatni canvas'ga chizadi (albom yo'nalishi, QR bilan) */
+/** Pastdagi «muhr»lar: daraja, yodlangan so'zlar, streak (sertifikatning rasmiy qiymatini oshiradi) */
+function statPills(ctx: CanvasRenderingContext2D, t: Tpl, cx: number, y: number, stats: NonNullable<Certificate['stats']>, pw: number, ph: number) {
+  const items: [string, string][] = [];
+  if (stats.lvl) items.push(['DARAJA', String(stats.lvl)]);
+  if (Number(stats.words) > 0) items.push(["SO'ZLAR", String(stats.words)]);
+  if (Number(stats.streak) > 0) items.push(['STREAK', `${stats.streak} kun`]);
+  if (!items.length) return;
+  const gap = 20;
+  const total = items.length * pw + (items.length - 1) * gap;
+  let x = cx - total / 2;
+  const lg = metal(ctx, t);
+  items.forEach(([label, value]) => {
+    const r = 16;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.lineTo(x + pw - r, y); ctx.quadraticCurveTo(x + pw, y, x + pw, y + r);
+    ctx.lineTo(x + pw, y + ph - r); ctx.quadraticCurveTo(x + pw, y + ph, x + pw - r, y + ph);
+    ctx.lineTo(x + r, y + ph); ctx.quadraticCurveTo(x, y + ph, x, y + ph - r);
+    ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fill();
+    ctx.strokeStyle = lg;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = t.accent;
+    ctx.font = `800 15px ${SANS}`;
+    spaced(ctx, label, x + pw / 2, y + 23, 2);
+    ctx.fillStyle = '#F1F5FB';
+    let fs = 31;
+    ctx.font = `800 ${fs}px ${SERIF}`;
+    while (ctx.measureText(value).width > pw - 20 && fs > 18) { fs -= 2; ctx.font = `800 ${fs}px ${SERIF}`; }
+    ctx.fillText(value, x + pw / 2, y + ph - 15);
+    x += pw + gap;
+  });
+}
+
+/** Sertifikatni canvas'ga chizadi: 16:9 (albom) yoki 9:16 (tik, Stories) format, QR bilan */
 export async function drawCertificate(canvas: HTMLCanvasElement, c: Certificate): Promise<void> {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -438,6 +478,10 @@ export async function drawCertificate(canvas: HTMLCanvasElement, c: Certificate)
   }
   const logo = await loadLogo();
   const t = TEMPLATES[c.tpl] || TEMPLATES.gold;
+  const story = c.fmt === 'story';
+  // DIQQAT: bundan keyingi chizish sinxron — W/H boshqa chizish bilan aralashib ketmaydi
+  W = story ? CERT_STORY_W : CERT_W;
+  H = story ? CERT_STORY_H : CERT_H;
   canvas.width = W;
   canvas.height = H;
   ctx.textAlign = 'center';
@@ -448,12 +492,12 @@ export async function drawCertificate(canvas: HTMLCanvasElement, c: Certificate)
   bg.addColorStop(1, '#0B152B');
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
-  const glow = ctx.createRadialGradient(W / 2, H * 0.42, 40, W / 2, H * 0.42, 900);
+  const glow = ctx.createRadialGradient(W / 2, H * 0.42, 40, W / 2, H * 0.42, story ? 1100 : 900);
   glow.addColorStop(0, t.frame[1] + '2E');
   glow.addColorStop(1, t.frame[1] + '00');
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
-  // pastki burchaklardagi nozik to'lqin chiziqlar
+  // nozik to'lqin chiziqlar
   ctx.strokeStyle = t.frame[1] + '30';
   ctx.lineWidth = 2;
   for (let i = 0; i < 7; i++) {
@@ -464,85 +508,121 @@ export async function drawCertificate(canvas: HTMLCanvasElement, c: Certificate)
   frame(ctx, t);
 
   // VocaBoost yozuvi (+ logotip)
-  ctx.font = `800 62px ${SANS}`;
+  const brandY = story ? 220 : 176;
+  ctx.font = `800 ${story ? 58 : 62}px ${SANS}`;
   const wv = ctx.measureText('Voca').width;
   const wb = ctx.measureText('Boost').width;
-  const lx = W / 2 - (wv + wb) / 2;
+  const lx = W / 2 - (wv + wb) / 2 + (story ? 30 : 0);
   ctx.textAlign = 'left';
   ctx.fillStyle = '#FFFFFF';
-  ctx.fillText('Voca', lx, 176);
+  ctx.fillText('Voca', lx, brandY);
   ctx.fillStyle = t.accent;
-  ctx.fillText('Boost', lx + wv, 176);
+  ctx.fillText('Boost', lx + wv, brandY);
   if (logo) {
     ctx.save();
-    ctx.beginPath(); ctx.arc(lx - 52, 156, 34, 0, Math.PI * 2); ctx.clip();
-    ctx.drawImage(logo, lx - 86, 122, 68, 68);
+    ctx.beginPath(); ctx.arc(lx - 52, brandY - 20, 34, 0, Math.PI * 2); ctx.clip();
+    ctx.drawImage(logo, lx - 86, brandY - 54, 68, 68);
     ctx.restore();
   }
   ctx.textAlign = 'center';
 
   // SERTIFIKAT
-  ctx.font = `800 150px ${SERIF}`;
+  let hs = story ? 118 : 150;
+  const hGap = story ? 6 : 10;
+  ctx.font = `800 ${hs}px ${SERIF}`;
+  if (story) {
+    const widthOf = () => Array.from('SERTIFIKAT').reduce((a, ch) => a + ctx.measureText(ch).width + hGap, -hGap);
+    while (widthOf() > W - 220 && hs > 60) { hs -= 4; ctx.font = `800 ${hs}px ${SERIF}`; }
+  }
+  const headY = story ? 440 : 330;
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.5)';
   ctx.shadowBlur = 14;
   ctx.shadowOffsetY = 5;
-  spaced(ctx, 'SERTIFIKAT', W / 2, 330, 10, vGrad(ctx, 210, 340, t.head[0], t.head[1]));
+  spaced(ctx, 'SERTIFIKAT', W / 2, headY, hGap, vGrad(ctx, headY - 120, headY + 10, t.head[0], t.head[1]));
   ctx.restore();
 
   // lenta (tur nomi), gul, toj
-  const ry = 428;
+  const ry = story ? 560 : 428;
   const half = ribbon(ctx, t, W / 2, ry);
-  sideDeco(ctx, t, W / 2, ry, half);
+  if (!story || half + 150 < W / 2 - 80) sideDeco(ctx, t, W / 2, ry, half);
   if (t.crown) crown(ctx, W / 2, ry - 54, '#FFF3C4');
 
   // matnlar
   ctx.fillStyle = '#D9E0EC';
-  ctx.font = `400 32px ${SERIF}`;
-  ctx.fillText('Ushbu sertifikat quyidagi shaxsga topshiriladi', W / 2, 548);
+  ctx.font = `400 ${story ? 36 : 32}px ${SERIF}`;
+  const subY = story ? 700 : 548;
+  ctx.fillText('Ushbu sertifikat quyidagi shaxsga topshiriladi', W / 2, subY);
 
-  let size = 112;
+  let size = story ? 108 : 112;
   ctx.font = `800 ${size}px ${SERIF}`;
   const nm = c.name || "F.I.SH.";
-  while (ctx.measureText(nm).width > W - 420 && size > 52) {
+  const nameMax = story ? W - 200 : W - 420;
+  while (ctx.measureText(nm).width > nameMax && size > 48) {
     size -= 6;
     ctx.font = `800 ${size}px ${SERIF}`;
   }
-  ctx.fillStyle = vGrad(ctx, 600, 690, t.nameGrad[0], t.nameGrad[1]);
-  ctx.fillText(nm, W / 2, 668);
+  const nameY = story ? 830 : 668;
+  ctx.fillStyle = vGrad(ctx, nameY - 68, nameY + 22, t.nameGrad[0], t.nameGrad[1]);
+  ctx.fillText(nm, W / 2, nameY);
 
   // chiziq + olmos
-  const my = 704;
+  const my = story ? 880 : 704;
+  const dHalf = story ? 380 : 520;
   const lg = metal(ctx, t);
   ctx.strokeStyle = lg;
   ctx.lineWidth = 2.5;
-  ctx.beginPath(); ctx.moveTo(W / 2 - 520, my); ctx.lineTo(W / 2 - 18, my); ctx.moveTo(W / 2 + 18, my); ctx.lineTo(W / 2 + 520, my); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(W / 2 - dHalf, my); ctx.lineTo(W / 2 - 18, my); ctx.moveTo(W / 2 + 18, my); ctx.lineTo(W / 2 + dHalf, my); ctx.stroke();
   ctx.fillStyle = lg;
   ctx.beginPath(); ctx.moveTo(W / 2, my - 11); ctx.lineTo(W / 2 + 11, my); ctx.lineTo(W / 2, my + 11); ctx.lineTo(W / 2 - 11, my); ctx.closePath(); ctx.fill();
 
   // Sarlavha (yutuq yoki natija) va Izoh
   ctx.fillStyle = '#F1F5FB';
-  ctx.font = `700 50px ${SERIF}`;
-  const titleLines = wrap(ctx, c.title || '', W - 460).slice(0, 2);
-  titleLines.forEach((l, i) => ctx.fillText(l, W / 2, 790 + i * 62));
+  ctx.font = `700 ${story ? 52 : 50}px ${SERIF}`;
+  const tY = story ? 980 : 790;
+  const tLH = story ? 66 : 62;
+  const titleLines = wrap(ctx, c.title || '', story ? W - 220 : W - 460).slice(0, story ? 3 : 2);
+  titleLines.forEach((l, i) => ctx.fillText(l, W / 2, tY + i * tLH));
+  let lastY = tY + Math.max(0, titleLines.length - 1) * tLH;
   if (c.reason) {
     ctx.fillStyle = '#A9B8CE';
-    ctx.font = `italic 400 31px ${SERIF}`;
-    const y0 = 790 + Math.max(0, titleLines.length - 1) * 62 + 58;
-    wrap(ctx, c.reason, W - 520).slice(0, 3).forEach((l, i) => ctx.fillText(l, W / 2, y0 + i * 44));
+    ctx.font = `italic 400 ${story ? 35 : 31}px ${SERIF}`;
+    const rLH = story ? 50 : 44;
+    const y0 = lastY + (story ? 62 : 58);
+    const rl = wrap(ctx, c.reason, story ? W - 260 : W - 520).slice(0, story ? 3 : 3);
+    rl.forEach((l, i) => ctx.fillText(l, W / 2, y0 + i * rLH));
+    lastY = y0 + Math.max(0, rl.length - 1) * rLH;
   }
 
-  // pastki chap: sana va raqam
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#B4C0D2';
-  ctx.font = `400 32px ${SERIF}`;
-  ctx.fillText(`Sana: ${fmtDate(c.date)}`, 150, H - 170);
-  ctx.fillText(`№ ${c.id}`, 150, H - 120);
+  // QR joylashuvi (format bo'yicha)
+  const qs = story ? 250 : 210;
+  const qx = story ? W / 2 - qs / 2 : W - 150 - qs;
+  const qy = story ? 1400 : H - 140 - qs - 24;
 
-  // pastki o'ng: QR (har bir sertifikat uchun alohida)
-  const qs = 210;
-  const qx = W - 150 - qs;
-  const qy = H - 140 - qs - 24;
+  // Muhrlar: daraja / so'zlar / streak (joy yetsagina chiziladi)
+  if (c.stats) {
+    const ph = story ? 68 : 62;
+    const sy = lastY + (story ? 46 : 40);
+    const limit = story ? qy - 30 : H - 150;
+    if (sy + ph <= limit) statPills(ctx, t, W / 2, sy, c.stats, story ? 250 : 220, ph);
+  }
+
+  if (story) {
+    // 9:16: sana va raqam QR ostida, o'rtada
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#B4C0D2';
+    ctx.font = `400 32px ${SERIF}`;
+    ctx.fillText(`Sana: ${fmtDate(c.date)}   ·   № ${c.id}`, W / 2, H - 150);
+  } else {
+    // pastki chap: sana va raqam
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#B4C0D2';
+    ctx.font = `400 32px ${SERIF}`;
+    ctx.fillText(`Sana: ${fmtDate(c.date)}`, 150, H - 170);
+    ctx.fillText(`№ ${c.id}`, 150, H - 120);
+  }
+
+  // QR (har bir sertifikat uchun alohida)
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(qx - 10, qy - 10, qs + 20, qs + 20);
   ctx.strokeStyle = lg;
@@ -562,9 +642,9 @@ export async function drawCertificate(canvas: HTMLCanvasElement, c: Certificate)
 
   // pastki o'rta: bot manzili
   ctx.textAlign = 'center';
-  ctx.font = `800 38px ${SANS}`;
+  ctx.font = `800 ${story ? 40 : 38}px ${SANS}`;
   ctx.fillStyle = t.accent;
-  ctx.fillText(CERT_BOT, W / 2, H - 118);
+  ctx.fillText(CERT_BOT, W / 2, story ? H - 92 : H - 118);
   ctx.textAlign = 'center';
 }
 

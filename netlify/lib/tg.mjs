@@ -247,20 +247,36 @@ export async function nextSeq(path = 'meta/certSeq') {
 
 export const certNumber = n => 'VB-' + String(n).padStart(6, '0');
 
-/** Sertifikatni bazaga yozadi (foydalanuvchi ostida + umumiy indeks) va raqamini qaytaradi */
-export async function issueCertificate(db, { userId, tpl, title, reason, name, auto = false, milestone = 0 }) {
-  const TPLS = ['bronze', 'silver', 'gold', 'platinum', 'champion', 'active', 'marathon', 'thanks'];
+/** Barcha sertifikat dizaynlari (src/services/certificate.ts va admin.html bilan bir xil bo'lishi shart) */
+export const CERT_TPLS = ['bronze', 'silver', 'gold', 'platinum', 'champion', 'active', 'marathon', 'thanks', 'trust', 'growth', 'wisdom', 'speed', 'reviewer', 'expert', 'consistent', 'limitless'];
+
+/** Reyting yozuvidan sertifikat «muhr»lari: daraja, yodlangan so'zlar, streak */
+export const statsFromLb = lb => {
+  if (!lb || typeof lb !== 'object') return undefined;
+  const words = Math.max(Number(lb.mastered) || 0, 0) || Math.max(Number(lb.learned) || 0, 0);
+  const streak = Math.max(0, Number(lb.streak) || 0);
+  const lvl = ['A1', 'A2', 'B1', 'B2', 'B2+', 'C1'].includes(String(lb.level)) ? String(lb.level) : '';
+  if (!words && !streak && !lvl) return undefined;
+  return { ...(lvl ? { lvl } : {}), ...(words ? { words } : {}), ...(streak ? { streak } : {}) };
+};
+
+/** Sertifikatni bazaga yozadi (foydalanuvchi ostida + umumiy indeks) va raqamini qaytaradi.
+ *  fmt: 'wide' (16:9) yoki 'story' (9:16). Berilmasa: «Minnatdorchilik» — avtomatik 9:16, qolganlari — 16:9 */
+export async function issueCertificate(db, { userId, tpl, title, reason, name, auto = false, milestone = 0, fmt, stats }) {
   const id = certNumber(await nextSeq());
   const date = tashkentDay();
+  const useTpl = CERT_TPLS.includes(tpl) ? tpl : 'gold';
   const cert = {
-    tpl: TPLS.includes(tpl) ? tpl : 'gold',
+    tpl: useTpl,
     title: String(title || '').slice(0, 100),
     reason: String(reason || '').slice(0, 200),
     name: String(name || "O'quvchi").slice(0, 40),
     date,
     ts: Date.now(),
     auto: !!auto,
+    fmt: fmt === 'story' || fmt === 'wide' ? fmt : useTpl === 'thanks' ? 'story' : 'wide',
     ...(milestone ? { milestone } : {}),
+    ...(stats ? { stats } : {}),
   };
   await db('PUT', `certs/${userId}/${id}`, cert);
   await db('PUT', `certIndex/${id}`, { userId, title: cert.title, date });

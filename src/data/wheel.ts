@@ -19,6 +19,8 @@ export interface WheelConfig {
   freeSpins: number;
   cooldownHours: number;
   vipHours: number;
+  /** Admin belgilaydigan VIP sovrinlarining JAMI ehtimoli (foiz, 0–100). Berilmasa — og'irlik bo'yicha */
+  vipPercent?: number | null;
 }
 
 export const DEFAULT_WHEEL: WheelConfig = {
@@ -59,6 +61,13 @@ export function buildWheel(cfg: any): { prizes: WheelPrize[]; freeSpins: number;
   const raw = toArr(cfg?.prizes).filter((p: any) => p && p.enabled !== false && Number(p.weight) > 0);
   const src = raw.length >= 2 ? raw : DEFAULT_WHEEL.prizes;
   const total = src.reduce((s: number, p: any) => s + Number(p.weight), 0) || 1;
+  // Admin VIP ehtimolini aniq foizda belgilagan bo'lsa: VIP sovrinlar jami shuncha foiz, qolganlari (100 - shuncha) ni o'zaro bo'lishadi
+  const vp = cfg?.vipPercent === null || cfg?.vipPercent === undefined || cfg?.vipPercent === '' ? NaN : Number(cfg.vipPercent);
+  const sliced = src.slice(0, 10);
+  const vipW = sliced.filter((p: any) => p.type === 'vip').reduce((s: number, p: any) => s + Number(p.weight), 0);
+  const othW = sliced.filter((p: any) => p.type !== 'vip').reduce((s: number, p: any) => s + Number(p.weight), 0);
+  const useVp = Number.isFinite(vp) && vipW > 0 && othW > 0;
+  const vipShare = useVp ? Math.min(100, Math.max(0, vp)) : 0;
   const prizes: WheelPrize[] = src.slice(0, 10).map((p: any, i: number) => {
     const type = (['xp', 'double_xp', 'extra_spin', 'vip', 'streak_saver'].includes(p.type) ? p.type : 'xp') as PrizeType;
     const amount = Math.max(1, Math.round(Number(p.amount) || 1));
@@ -71,7 +80,7 @@ export function buildWheel(cfg: any): { prizes: WheelPrize[]; freeSpins: number;
       title: t.title,
       description: t.description,
       emoji: String(p.emoji || t.emoji).slice(0, 4),
-      probability: (Number(p.weight) / total) * 100,
+      probability: useVp ? (type === 'vip' ? (Number(p.weight) / vipW) * vipShare : (Number(p.weight) / othW) * (100 - vipShare)) : (Number(p.weight) / total) * 100,
       color: /^#[0-9a-fA-F]{6}$/.test(p.color || '') ? p.color : COLORS[i % COLORS.length],
       big: type === 'xp' && amount >= 50,
     };
@@ -97,7 +106,7 @@ export function pickPrize(prizes: WheelPrize[]): WheelPrize {
   let acc = 0;
   for (const p of prizes) {
     acc += p.probability;
-    if (r < acc) return p;
+    if (r < acc && p.probability > 0) return p;
   }
-  return prizes[0];
+  return prizes.find(p => p.probability > 0) || prizes[0];
 }

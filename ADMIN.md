@@ -211,3 +211,15 @@ Ushbu versiyada barcha so'ralgan funksiyalar va tizim takomillashtirishlari to'l
 - **Mavzuli chellenj:** admin «Bugungi mashqlar» bo'limidagi lug'at to'plamini tanlaydi. Ball: to'plamdagi o'rganilgan so'z — 1 ball, yodlangan so'z — yana +1 ball (qatnashish paytidagi holatdan boshlab).
 - **Marafon (3 jon):** cheksiz savol, 3 jon va har bir savolga 30 soniya (admin ikkalasini o‘zgartira oladi; vaqt tugasa o‘yin tugaydi). Natija — jonlar tugaguncha topilgan so'zlar soni. Har kimga **faqat 1 ta urinish**; boshlash va tugash vaqtini admin belgilaydi. Teng natijada oldin tugatgan yuqori turadi.
 - Oddiy XP / yangi so'z / yodlash chellenjlari avvalgidek ishlaydi.
+
+## v4.7.0 yangiliklari
+- **Liga → Yangi hafta**: TOP-20 «Tarix zali»ga (`hall/wNNNN`) qotiriladi, hamma XP 0 ga tushadi; ixtiyoriy: TOP-3 ga aylantirish sovg'asi, 1-o'ringa sertifikat.
+- **Xabarlar** bo'limi: foydalanuvchilar yozgan xabarlar (kim, qachon), «Javob yozish» bot orqali boradi. Funksiya: `netlify/functions/inbox.mjs`.
+- **Baraban**: «VIP sovg'a ehtimoli (%)» — aniq foiz.
+- **Sertifikat**: yuborishda 9:16 yoki 16:9 tanlanadi; «Minnatdorchilik» avtomatik 9:16. Yangi avtomatik sertifikatlar: Barqaror (7/14/30 kun streak), Bilim donosi (daraja tugatildi), Tezkor (10/25/50 duel g'alaba), Mutaxassis (mavzuli to'plam).
+- **Firebase qoidalari** yangilandi (`database.rules.json`): `certs` faqat `certs/<uid>` bo'yicha o'qiladi, `messages` yopiq, `hall` ochiq. Qoidalarni Firebase Console'ga qayta joylang!
+- Netlify krediti: `grants` faqat `hasGrant` bayrog'i bo'lsa chaqiriladi, soat sinxroni sessiyada 1 marta, bot ro'yxati 3 kunda 1 marta, Stories rasmi 1 marta yuklanadi.
+- `public/cert-render.js` `src/services/certificate.ts` o'zgarsa qayta yig'iladi: `npx esbuild src/services/certificate.ts --bundle --format=iife --global-name=VBC --minify --outfile=public/cert-render.js`
+
+## Talaffuz (TTS) — Netlify krediti 0
+Ilova endi `/.netlify/functions/tts` ni chaqirmaydi. Ketma-ketlik: inson yozuvi (Free Dictionary) → Wikimedia inson yozuvi → sifatli tizim ovozi → Google TTS → brauzer ovozi. Eski serverli neyral ovozni qaytarish uchun Netlify env'da `VITE_SERVER_TTS=1` qo'ying (kredit sarflaydi).

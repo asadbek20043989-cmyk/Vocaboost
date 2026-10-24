@@ -4,10 +4,10 @@
 // Begona shaxslar boshqa foydalanuvchilarning hisoblarini o'chira yoki soxtalashtira olmaydi.
 import { verifyInitData } from '../lib/tg.mjs';
 
-const ALLOWED = /^(leaderboard|state|duels|challenges|config|certs|words|packs)(\/[A-Za-z0-9_\-:.@+]{1,200}){0,6}$/;
+const ALLOWED = /^(leaderboard|state|duels|challenges|config|certs|words|packs|hall)(\/[A-Za-z0-9_\-:.@+]{1,200}){0,6}$/;
 const MAX_BODY = 300 * 1024;
 // Umumiy ma'lumotlar uchun CDN kesh muddati (soniya)
-const SHARED_TTL = { leaderboard: 30, config: 30, challenges: 30, words: 600, packs: 600 };
+const SHARED_TTL = { leaderboard: 30, config: 30, challenges: 30, words: 600, packs: 600, hall: 3600 };
 
 const reply = (status, body) => ({
   statusCode: status,
@@ -108,9 +108,10 @@ export const handler = async event => {
         }
       }
       // Admin XP tuzatishi (adj/adjV) faqat admin paneldan o'zgaradi — ilova yozolmaydi
-      if ('adj' in parsed || 'adjV' in parsed) {
+      if ('adj' in parsed || 'adjV' in parsed || 'hasGrant' in parsed) {
         delete parsed.adj;
         delete parsed.adjV;
+        delete parsed.hasGrant; // faqat server qo'yadi
         body = JSON.stringify(parsed);
       }
       if (parsed.name && typeof parsed.name === 'string') {

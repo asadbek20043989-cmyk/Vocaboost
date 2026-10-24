@@ -2,7 +2,7 @@
 //   GET  /.netlify/functions/cert?id=VB-000123     — ochiq: sertifikat ma'lumotlari (bekor qilingan bo'lsa topilmaydi)
 //   POST {action:'claim', uid, n, name, initData}  — "n ta so'z yodlandi" sertifikatini oladi (har bir bosqich uchun bir marta)
 //   POST {action:'welcome', uid, name, initData}   — ilovaga kirgan har bir foydalanuvchiga bir martalik «Minnatdorchilik» sertifikati
-import { json, parseBody, verifyInitData, makeDb, issueCertificate } from '../lib/tg.mjs';
+import { json, parseBody, verifyInitData, makeDb, issueCertificate, statsFromLb } from '../lib/tg.mjs';
 
 const ID_RE = /^[A-Za-z0-9_\-]{3,40}$/;
 const MILESTONES = { 100: 'bronze', 250: 'silver', 500: 'gold', 750: 'platinum', 1000: 'champion' };
@@ -70,7 +70,7 @@ export const handler = async event => {
       if (!c) return json(200, { found: false });
       return json(200, {
         found: true,
-        cert: { id, tpl: c.tpl, title: c.title || '', reason: c.reason || '', name: c.name || '', date: c.date || '', special: !c.auto },
+        cert: { id, tpl: c.tpl, title: c.title || '', reason: c.reason || '', name: c.name || '', date: c.date || '', special: !c.auto, fmt: c.fmt || (c.tpl === 'thanks' ? 'story' : 'wide'), stats: c.stats || null },
       }, { 'Netlify-CDN-Cache-Control': 'public, s-maxage=120' });
     }
 
@@ -98,7 +98,7 @@ export const handler = async event => {
         const cfg = (await db('GET', 'config/thanksCert')) || {};
         const title = String(cfg.title || WELCOME_TITLE).trim();
         const reason = String(cfg.reason || WELCOME_REASON).trim();
-        const issued = await issueCertificate(db, { userId: wuid, tpl: 'thanks', title, reason, name: nm, auto: true });
+        const issued = await issueCertificate(db, { userId: wuid, tpl: 'thanks', title, reason, name: nm, auto: true, fmt: 'story', stats: statsFromLb(lbw) });
         await db('PUT', `welcomeIdx/${wuid}`, { id: issued.id, ts: Date.now() });
         return json(200, { ok: true, id: issued.id, date: issued.date });
       } catch (err) {
@@ -110,11 +110,62 @@ export const handler = async event => {
       const certId = String(body.id || '').trim().toUpperCase();
       const b64 = String(body.image || '');
       if (ID_RE.test(certId) && b64.length > 500 && b64.length < 5_000_000) {
+        if (await db('GET', `certImages/${certId}/ts`).catch(() => null)) return json(200, { ok: true, existing: true }); // allaqachon bor — qayta yozilmaydi
         const cleanB64 = b64.replace(/^data:image\/[a-z]+;base64,/, '');
         await db('PUT', `certImages/${certId}`, { b64: cleanB64, ts: Date.now() }).catch(() => {});
         return json(200, { ok: true });
       }
       return json(400, { error: 'Rasm formati xato' });
+    }
+    // Qo'shimcha avtomatik sertifikatlar: Barqaror (streak), Bilim donosi (daraja tugatildi), Tezkor (duel g'alabalari), Mutaxassis (mavzuli to'plam)
+    if (body.action === 'award') {
+      const kind = String(body.kind || '');
+      const key = String(body.key || '').slice(0, 30);
+      const auid = String(body.uid || '');
+      if (!ID_RE.test(auid) || !/^[a-z0-9_\-]{1,30}$/i.test(key)) return json(400, { error: "So'rov noto'g'ri" });
+      if (auid.startsWith('tg_') && process.env.BOT_TOKEN) {
+        const user = verifyInitData(body.initData, process.env.BOT_TOKEN);
+        if (!user || `tg_${user.id}` !== auid) return json(401, { error: 'Telegram imzosi tasdiqlanmadi' });
+      }
+      const n = Math.max(0, Math.min(100000, Number(body.n) || 0));
+      const lb = await db('GET', `leaderboard/${auid}`);
+      if (!lb) return json(409, { error: "Reyting yozuvi hali yo'q", retry: true });
+      let tpl = '', title = '', reason = '';
+      if (kind === 'streak' && [7, 14, 30].includes(n)) {
+        if (Number(lb.streak) < n) return json(409, { error: 'Streak yetarli emas', retry: true });
+        tpl = 'consistent';
+        title = `${n} kunlik uzluksiz streak`;
+        reason = `Har kuni mashq qilib, ${n} kun ketma-ket o'z maqsadingizdan chekinmadingiz`;
+      } else if (kind === 'level' && ['A1', 'A2', 'B1', 'B2+'].includes(String(body.level))) {
+        if (Number(lb.mastered) < 20) return json(409, { error: "Yodlangan so'zlar hali kam", retry: true });
+        tpl = 'wisdom';
+        title = `${body.level} darajasi to'liq yodlandi`;
+        reason = `${body.level} darajasidagi barcha so'zlarni 100% o'zlashtirgan o'quvchi`;
+      } else if (kind === 'duel' && [10, 25, 50].includes(n)) {
+        tpl = 'speed';
+        title = `Blitz duelda ${n} marta g'alaba`;
+        reason = `Raqiblarni tezlikda ortda qoldirgan haqiqiy tezkor o'yinchi`;
+      } else if (kind === 'pack') {
+        if (Number(lb.mastered) < 5) return json(409, { error: "Yodlangan so'zlar hali kam", retry: true });
+        tpl = 'expert';
+        title = String(body.title || "Haftalik mavzuli to'plam").slice(0, 70) + " — to'liq o'zlashtirildi";
+        reason = "Mavzuli lug'at to'plamidagi barcha so'zlar muvaffaqiyatli yodlandi";
+      } else return json(400, { error: 'Mezon noto\'g\'ri' });
+      const idxPath = `awardIdx/${auid}/${kind}_${key}`;
+      const had = await db('GET', idxPath);
+      if (had && had.id) {
+        const c = await db('GET', `certs/${auid}/${had.id}`);
+        return json(200, c ? { ok: true, id: had.id, existing: true } : { ok: true, revoked: true });
+      }
+      if (!(await reserveOnce(idxPath))) return json(200, { ok: true, pending: true });
+      try {
+        const issued = await issueCertificate(db, { userId: auid, tpl, title, reason, name: String(body.name || lb.name || "O'quvchi").slice(0, 40), auto: true, stats: statsFromLb(lb) });
+        await db('PUT', idxPath, { id: issued.id, ts: Date.now() });
+        return json(200, { ok: true, id: issued.id, date: issued.date });
+      } catch (err) {
+        await db('DELETE', idxPath).catch(() => {});
+        throw err;
+      }
     }
     if (body.action !== 'claim') return json(400, { error: "Noma'lum amal" });
 
@@ -152,6 +203,7 @@ export const handler = async event => {
       name: String(body.name || lb.name || "O'quvchi").slice(0, 40),
       auto: true,
       milestone: n,
+      stats: statsFromLb(lb),
     });
     await db('PUT', `milestoneIdx/${uid}/${n}`, issued.id);
     return json(200, { ok: true, id: issued.id, date: issued.date });

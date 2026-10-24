@@ -11,7 +11,7 @@ export async function fetchCertificate(id: string): Promise<Certificate | null> 
   if (!r.ok && r.status !== 200) throw new Error(j?.error || `Xato ${r.status}`);
   if (!j.found || !j.cert) return null;
   const c = j.cert;
-  return { id: c.id, tpl: String(c.tpl || 'gold'), title: String(c.title || ''), reason: c.reason || undefined, name: String(c.name || ''), date: String(c.date || '').slice(0, 10), special: !!c.special, verified: true };
+  return { id: c.id, tpl: String(c.tpl || 'gold'), title: String(c.title || ''), reason: c.reason || undefined, name: String(c.name || ''), date: String(c.date || '').slice(0, 10), special: !!c.special, verified: true, fmt: c.fmt === 'story' ? 'story' : 'wide', stats: c.stats || undefined };
 }
 
 /** "n ta so'z yodlandi" sertifikatini olish (server raqam beradi va QR uchun ro'yxatga oladi) */
@@ -33,6 +33,18 @@ export async function claimWelcomeCertificate(uid: string, name: string): Promis
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'welcome', uid, name, initData: getTelegramWebApp()?.initData || '' }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j?.error || `Xato ${r.status}`);
+  return j;
+}
+
+/** Qo'shimcha avtomatik sertifikatlar: Barqaror (streak), Bilim donosi (daraja), Tezkor (duel), Mutaxassis (to'plam) */
+export async function claimAward(uid: string, kind: 'streak' | 'level' | 'duel' | 'pack', key: string, extra: { n?: number; level?: string; title?: string; name: string }): Promise<{ id?: string; revoked?: boolean; pending?: boolean }> {
+  const r = await fetch(URL_BASE, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'award', uid, kind, key, ...extra, initData: getTelegramWebApp()?.initData || '' }),
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j?.error || `Xato ${r.status}`);

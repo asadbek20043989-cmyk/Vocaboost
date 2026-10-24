@@ -83,6 +83,7 @@
       <button data-t="remind">🔔 Eslatmalar</button>
       <button data-t="ad">📢 Reklama</button>
       <button data-t="league">🏆 Liga</button>
+      <button data-t="inbox">✉️ Xabarlar <span id="inboxBadge" class="tag d" style="display:none"></span></button>
       <button data-t="certs">🎓 Sertifikat</button>
       <button data-t="settings">⚙️ Sozlamalar</button>
     </div>
@@ -217,7 +218,9 @@
           <div><label>Bepul aylantirishlar soni</label><input id="p_free" type="number" min="1" max="10" /></div>
           <div><label>Kutish vaqti (soat)</label><input id="p_cool" type="number" min="1" max="168" /></div>
           <div><label>VIP muddati (soat, standart)</label><input id="p_vip" type="number" min="1" max="720" /></div>
+          <div><label>👑 VIP sovg'a ehtimoli (%) — bo'sh = og'irlik bo'yicha</label><input id="p_vipPct" type="number" min="0" max="100" step="0.5" placeholder="masalan: 5" /></div>
         </div>
+        <p class="small">VIP ehtimoli aniq foizda qo'yilsa, barcha VIP bo'laklar jami shuncha foiz oladi, qolgan sovrinlar esa (100 − shuncha)% ni o'zaro og'irlik bo'yicha bo'lishadi. <b>0</b> qo'ysangiz VIP umuman tushmaydi.</p>
         <div class="msg s" id="pEv" style="margin-top:12px"></div>
         <div class="row"><button id="pSave">Saqlash</button><button class="sec" id="pReset">Standart holatga qaytarish</button></div>
       </div>
@@ -356,9 +359,29 @@
 
     <section id="t-league" class="hide">
       <div class="card">
-        <div class="row" style="justify-content:space-between"><h2>Liga <span class="small" id="lCount"></span></h2><button class="bad" id="resetLeague">Yangi mavsum (hammasi 0 dan)</button></div>
+        <h2>🗓 Haftalik ligani yangilash <span class="small" id="lgWeek"></span></h2>
+        <p class="small">«Yangi hafta» bosilganda: <b>1)</b> TOP-20 ning to'plagan XP si <b>Tarix zali</b>ga o'zgarmas qilib yoziladi (keyin hech kim o'zgartira olmaydi); <b>2)</b> hamma foydalanuvchining liga XP si 0 ga tushadi; <b>3)</b> yangi hafta boshlanadi. Streak, so'zlar va sertifikatlar o'zgarmaydi.</p>
+        <label class="chk"><input type="checkbox" id="lgSpins" checked> 🎁 TOP-3 ga baraban aylantirishlari sovg'a qilinsin (1-o'rin: 5, 2-o'rin: 3, 3-o'rin: 2 ta, 3 kun ichida ishlatish)</label>
+        <label class="chk"><input type="checkbox" id="lgCert"> 🏆 1-o'ringa «Chempion» sertifikati berilsin</label>
+        <div class="row"><select id="lgCertFmt" style="max-width:260px"><option value="story">📱 Sertifikat 9:16</option><option value="wide">🖥 Sertifikat 16:9</option></select><button class="bad" id="resetLeague">🔄 Yangi hafta (hammaning XP si 0 dan)</button></div>
+      </div>
+      <div class="card">
+        <h2>🏛 Tarix zali <span class="small" id="hallCount"></span></h2>
+        <p class="small">Yakunlangan haftalar. Bu ma'lumotlar foydalanuvchilarga «Tarix zali» bo'limida ko'rinadi va o'zgarmaydi.</p>
+        <div id="hallList"></div>
+      </div>
+      <div class="card">
+        <div class="row" style="justify-content:space-between"><h2>Liga <span class="small" id="lCount"></span></h2></div>
         <input id="lSearch" placeholder="Ism yoki ID bo'yicha qidirish..." style="margin-bottom:10px" />
         <div class="scroll"><table><thead><tr><th></th><th>Ism</th><th>XP</th><th>Streak</th><th>Holat</th><th></th></tr></thead><tbody id="lBody"></tbody></table></div>
+      </div>
+    </section>
+
+    <section id="t-inbox" class="hide">
+      <div class="card">
+        <div class="row" style="justify-content:space-between"><h2>✉️ Foydalanuvchilar xabarlari <span class="small" id="inCount"></span></h2><div class="row"><select id="inFilter" style="max-width:170px"><option value="all">Hammasi</option><option value="unread">O'qilmaganlar</option><option value="replied">Javob berilgan</option></select><button class="sec" id="inRefresh">Yangilash</button></div></div>
+        <p class="small">Foydalanuvchi profilidagi «Adminga xabar» orqali yuborgan xabarlar shu yerda ism, ID va vaqti bilan ko'rinadi. «Javob yozish» bosilsa, javob foydalanuvchining Telegram chatiga botdan boradi.</p>
+        <div id="inBox"></div>
       </div>
     </section>
 
@@ -370,6 +393,8 @@
         <select id="cUser" size="5" style="margin-top:6px"></select>
         <label>Andoza</label>
         <div class="tplrow" id="cTpls"></div>
+        <label>Sertifikat formati</label>
+        <select id="cFmt"><option value="wide">🖥 16:9 — albom (A4 gorizontal)</option><option value="story">📱 9:16 — tik (Telegram Stories, telefon ekrani)</option></select>
         <label>Sarlavha * — sertifikatda ismning ostida, katta yozuv («Yutuq yoki natija» o'rnida)</label><input id="cTitle" placeholder="Masalan: Oktabr oyining eng faol o'quvchisi" />
         <label>Izoh (ixtiyoriy) — sarlavha ostida kichik qiya yozuv</label><input id="cReason" placeholder="Masalan: Har kuni mashq qilgani va 30 kunlik streak uchun" />
         <label>Sertifikatdagi ism (bo'sh qoldirsangiz, foydalanuvchining ismi)</label><input id="cName" />
@@ -473,7 +498,7 @@ async function load() {
     renderAll();
   } catch (e) { flash(e.message, false); }
 }
-function renderAll() { loadBotStart(); loadThanksCert(); loadChals(); renderPacks(); if ($('ch_pack') && !chEditId) chFillPacks($('ch_pack').value); renderCertText(); renderUsers(); renderRemind(); renderAd(); renderStats(); renderWords(); renderPlan(); renderGames(); renderWheel(); renderPool(); renderLeague(); renderCerts(); renderSettings(); }
+function renderAll() { loadInbox(); loadHall(); loadBotStart(); loadThanksCert(); loadChals(); renderPacks(); if ($('ch_pack') && !chEditId) chFillPacks($('ch_pack').value); renderCertText(); renderUsers(); renderRemind(); renderAd(); renderStats(); renderWords(); renderPlan(); renderGames(); renderWheel(); renderPool(); renderLeague(); renderCerts(); renderSettings(); }
 const dailyFor = d => (data.config.daily || {})[d] || {};
 
 /* ---------- umumiy ---------- */
@@ -602,8 +627,14 @@ const DEF_PRIZES = [{type:'xp',amount:10,weight:25,color:'#2563EB'},{type:'xp',a
 const PT = { xp:'XP', double_xp:'2x XP', extra_spin:"Qo'shimcha urinish", vip:'VIP (soat)', streak_saver:'Streak muzlatish ❄️' };
 function renderWheel() {
   const w = data.config.wheel;
-  if (!prizes.length || !$('pList').dataset.init) { prizes = arr(w?.prizes).length ? arr(w.prizes).map(p => ({...p})) : DEF_PRIZES.map(p => ({...p})); $('pList').dataset.init = 1; $('p_free').value = w?.freeSpins ?? 3; $('p_cool').value = w?.cooldownHours ?? 24; $('p_vip').value = w?.vipHours ?? 24; }
+  if (!prizes.length || !$('pList').dataset.init) { prizes = arr(w?.prizes).length ? arr(w.prizes).map(p => ({...p})) : DEF_PRIZES.map(p => ({...p})); $('pList').dataset.init = 1; $('p_free').value = w?.freeSpins ?? 3; $('p_cool').value = w?.cooldownHours ?? 24; $('p_vip').value = w?.vipHours ?? 24; $('p_vipPct').value = (w?.vipPercent ?? '') === null ? '' : (w?.vipPercent ?? ''); }
   drawPrizes();
+}
+function pctOf(p, act, tot) {
+  const vpRaw = $('p_vipPct').value, vp = vpRaw === '' ? NaN : +vpRaw;
+  const vipW = act.filter(x => x.type === 'vip').reduce((s,x)=>s+(+x.weight),0), othW = act.filter(x => x.type !== 'vip').reduce((s,x)=>s+(+x.weight),0);
+  if (Number.isFinite(vp) && vipW > 0 && othW > 0) return p.type === 'vip' ? (+p.weight)/vipW*Math.min(100,Math.max(0,vp)) : (+p.weight)/othW*(100-Math.min(100,Math.max(0,vp)));
+  return (+p.weight)/tot*100;
 }
 function drawPrizes() {
   const act = prizes.filter(p => p.enabled !== false && +p.weight > 0), tot = act.reduce((s,p)=>s+(+p.weight),0) || 1;
@@ -613,17 +644,18 @@ function drawPrizes() {
     <input data-i="${i}" data-f="label" placeholder="Yozuv (ixtiyoriy)" value="${esc(p.label||'')}">
     <input data-i="${i}" data-f="weight" type="number" min="0" value="${p.weight}" title="Og'irlik">
     <input data-i="${i}" data-f="color" type="color" value="${p.color||'#2563EB'}">
-    <span class="small">${p.enabled===false||!(+p.weight>0)?'—':((+p.weight)/tot*100).toFixed(1)+'%'}</span>
+    <span class="small">${p.enabled===false||!(+p.weight>0)?'—':pctOf(p,act,tot).toFixed(1)+'%'}</span>
     <label class="chk" title="Yoqilgan"><input type="checkbox" data-i="${i}" data-f="enabled" ${p.enabled===false?'':'checked'}></label>
     <button class="bad" data-del="${i}">×</button></div>`).join('');
   $('pList').querySelectorAll('[data-f]').forEach(el => el.onchange = () => { const p = prizes[+el.dataset.i], f = el.dataset.f; p[f] = el.type === 'checkbox' ? el.checked : (['amount','weight'].includes(f) ? +el.value : el.value); drawPrizes(); });
   $('pList').querySelectorAll('[data-del]').forEach(b => b.onclick = () => { prizes.splice(+b.dataset.del, 1); drawPrizes(); });
-  const xp = act.reduce((s,p) => s + (p.type === 'xp' ? (+p.amount||0) * (+p.weight)/tot : 0), 0);
+  const xp = act.reduce((s,p) => s + (p.type === 'xp' ? (+p.amount||0) * pctOf(p,act,tot)/100 : 0), 0);
   $('pEv').textContent = `Faol sovrinlar: ${act.length}. Bitta aylantirishda o'rtacha ~${xp.toFixed(1)} XP beradi (katta XP sovrinlari ligani qadrsizlantirishi mumkin).`;
 }
+$('p_vipPct').oninput = () => drawPrizes();
 $('pAdd').onclick = () => { if (prizes.length >= 10) return flash("Ko'pi bilan 10 ta sovrin", false); prizes.push({ type:'xp', amount:15, weight:10, color:'#2563EB' }); drawPrizes(); };
-$('pSave').onclick = guard(async () => { await api('setConfig', { key: 'wheel', value: { prizes: prizes.map(p => ({ type:p.type, amount:+p.amount||1, label:p.label||'', color:p.color, weight:+p.weight||0, enabled:p.enabled!==false })), freeSpins:+$('p_free').value||3, cooldownHours:+$('p_cool').value||24, vipHours:+$('p_vip').value||24 } }); flash('Baraban saqlandi ✅'); await load(); });
-$('pReset').onclick = () => { prizes = DEF_PRIZES.map(p => ({...p})); $('p_free').value = 3; $('p_cool').value = 24; $('p_vip').value = 24; drawPrizes(); flash("Standart qiymatlar qo'yildi. Saqlash tugmasini bosing."); };
+$('pSave').onclick = guard(async () => { await api('setConfig', { key: 'wheel', value: { prizes: prizes.map(p => ({ type:p.type, amount:+p.amount||1, label:p.label||'', color:p.color, weight:+p.weight||0, enabled:p.enabled!==false })), freeSpins:+$('p_free').value||3, cooldownHours:+$('p_cool').value||24, vipHours:+$('p_vip').value||24, vipPercent: $('p_vipPct').value === '' ? null : +$('p_vipPct').value } }); flash('Baraban saqlandi ✅'); await load(); });
+$('pReset').onclick = () => { prizes = DEF_PRIZES.map(p => ({...p})); $('p_free').value = 3; $('p_cool').value = 24; $('p_vip').value = 24; $('p_vipPct').value = ''; drawPrizes(); flash("Standart qiymatlar qo'yildi. Saqlash tugmasini bosing."); };
 
 /* ---------- missiyalar ---------- */
 const POOL = [['learn-5',"5 ta yangi so'z o'rganish",20],['learn-10',"10 ta yangi so'z o'rganish",35],['review-10',"10 ta so'zni takrorlash",25],['review-20',"20 ta so'zni takrorlash",40],['game-1',"1 ta o'yin o'ynash",15],['game-3',"3 ta turli o'yin o'ynash",35],['wheel-1','Barabanni 1 marta aylantirish',15],['master-1',"1 ta so'zni to'liq yodlash",30],['perfect-1',"Xatosiz raund/o'yin",30]];
@@ -659,7 +691,48 @@ async function userAction(a, id) {
   if (a === 'restore') await api('setUser', { id, patch: { deleted: false } });
   flash('Bajarildi ✅'); await load();
 }
-$('resetLeague').onclick = guard(async () => { if (!confirm("Barcha foydalanuvchilarning liga XP si 0 ga tushiriladi (yangi mavsum). Davom etilsinmi?")) return; const r = await api('resetLeague'); flash(`${r.count} ta ishtirokchi 0 dan boshlandi`); await load(); });
+$('resetLeague').onclick = guard(async () => {
+  const wk = (data.config.league || {}).week || 1;
+  if (!confirm(`${wk}-hafta yakunlansinmi?\n\n• TOP-20 Tarix zaliga qotiriladi\n• Hamma foydalanuvchining liga XP si 0 ga tushadi\n\nBu amalni qaytarib bo'lmaydi. Davom etilsinmi?`)) return;
+  const r = await api('resetLeague', { rewardSpins: $('lgSpins').checked, rewardCert: $('lgCert').checked, certFmt: $('lgCertFmt').value });
+  flash(`${r.week}-hafta yakunlandi ✅ Tarix zaliga ${r.archived} ta o'quvchi yozildi, ${r.count} ta ishtirokchi 0 dan boshlandi${r.rewarded ? `, ${r.rewarded} ta mukofot berildi` : ''}`);
+  await load(); await loadHall();
+});
+let hall = [];
+async function loadHall() { try { const r = await api('listHall'); hall = r.items || []; data.config.league = r.league || data.config.league; renderHall(); } catch (e) { flash(e.message, false); } }
+function renderHall() {
+  const wk = (data.config.league || {}).week || 1;
+  $('lgWeek').textContent = `(hozir: ${wk}-hafta davom etmoqda)`;
+  $('hallCount').textContent = `(${hall.length} hafta)`;
+  $('hallList').innerHTML = hall.map(h => `<details style="margin-bottom:8px"><summary><b>${h.week}-hafta</b> · ${esc(h.date||'')} · ${h.players||0} ishtirokchi · 👑 ${esc((arr(h.top)[0]||{}).name||'—')} (${(arr(h.top)[0]||{}).xp||0} XP)</summary>
+    <div class="scroll"><table><thead><tr><th>#</th><th>Ism</th><th>XP</th><th>Streak</th></tr></thead><tbody>${arr(h.top).map(t => `<tr><td>${t.place}</td><td>${esc(t.name)}<br><span class="small">${esc(t.uid)}</span></td><td><b>${t.xp}</b></td><td>${t.streak||0}</td></tr>`).join('')}</tbody></table></div></details>`).join('') || '<div class="small">Hali birorta hafta yakunlanmagan.</div>';
+}
+
+/* ---------- xabarlar (foydalanuvchi -> admin) ---------- */
+let inbox = [];
+const fmtTs = ms => ms ? new Date(ms + 5*3600*1000).toISOString().slice(0,16).replace('T',' ') + ' (Toshkent)' : '';
+const KIND_UZ = { savol:'❓ Savol', muammo:'🐞 Muammo', taklif:'💡 Taklif', boshqa:'💬 Boshqa' };
+async function loadInbox() { try { const r = await api('listMessages'); inbox = r.items || []; renderInbox(); } catch (e) { flash(e.message, false); } }
+function renderInbox() {
+  const f = $('inFilter').value;
+  const unread = inbox.filter(m => !m.read).length;
+  $('inboxBadge').style.display = unread ? '' : 'none'; $('inboxBadge').textContent = unread;
+  const rows = inbox.filter(m => f === 'unread' ? !m.read : f === 'replied' ? !!m.reply : true);
+  $('inCount').textContent = `(${rows.length} / ${inbox.length}, o'qilmagan: ${unread})`;
+  $('inBox').innerHTML = rows.map(m => `<div class="gcard" style="${m.read ? '' : 'border-color:#f5b301'}">
+    <div class="row" style="justify-content:space-between"><div><b>${esc(m.name||'—')}</b> ${m.un ? `<span class="small">@${esc(m.un)}</span>` : ''} <span class="tag">${KIND_UZ[m.kind]||'💬'}</span> ${m.read ? '' : '<span class="tag d">yangi</span>'}<br><span class="small">${esc(m.uid)} · daraja ${esc(m.level||'—')} · ${m.xp||0} XP</span></div><div class="small">🕒 ${esc(fmtTs(m.ts))}</div></div>
+    <p style="white-space:pre-wrap;margin:8px 0">${esc(m.text)}</p>
+    ${m.reply ? `<div class="msg s" style="margin:6px 0">↪ Javob (${esc(fmtTs(m.repliedAt))}): ${esc(m.reply)}</div>` : ''}
+    <div class="acts"><button class="sec" data-a="reply" data-id="${esc(m.id)}">Javob yozish</button><button class="sec" data-a="read" data-id="${esc(m.id)}">${m.read ? "O'qilmagan qilish" : "O'qildi"}</button><button class="bad" data-a="del" data-id="${esc(m.id)}">O'chirish</button></div></div>`).join('') || '<div class="small">Xabar yo\'q.</div>';
+  $('inBox').querySelectorAll('button').forEach(b => b.onclick = guard(async () => {
+    const m = inbox.find(x => x.id === b.dataset.id); if (!m) return;
+    if (b.dataset.a === 'reply') { const t = prompt(`${m.name||m.uid} ga javob (Telegram botdan boradi):`, ''); if (!t) return; const r = await api('replyMessage', { id: m.id, text: t }); flash(r.sent ? 'Javob yuborildi ✅' : 'Javob saqlandi (foydalanuvchi Telegram hisobi emas)'); }
+    if (b.dataset.a === 'read') await api('markMessage', { id: m.id, read: !m.read });
+    if (b.dataset.a === 'del') { if (!confirm("Xabar o'chirilsinmi?")) return; await api('deleteMessage', { id: m.id }); }
+    await loadInbox();
+  }));
+}
+$('inFilter').onchange = renderInbox; $('inRefresh').onclick = () => loadInbox();
 
 /* ---------- sertifikatlar ---------- */
 const TPL = {
@@ -678,11 +751,11 @@ function renderCerts() {
   fillUsers();
   $('cTpls').innerHTML = Object.entries(TPL).map(([k,[n,c]]) => `<div class="tplb ${curTpl===k?'on':''}" data-k="${k}" style="border-left:6px solid ${c}">${n}</div>`).join('');
   $('cTpls').querySelectorAll('.tplb').forEach(b => b.onclick = () => { curTpl = b.dataset.k; renderCerts(); });
-  $('cBody').innerHTML = certs.map(c => `<tr><td><b>${esc(c.id)}</b></td><td>${esc(c.name||'')}<br><span class="small">${esc(c.userId)}</span></td><td>${esc(c.title)}<br><span class="small">${esc(c.reason||'')}${c.auto?' · avtomatik':''}</span></td><td>${esc((TPL[c.tpl]||[c.tpl])[0])}</td><td>${esc(c.date||'')}</td><td><div class="acts"><button class="sec" data-v="${esc(c.id)}">Ko'rish / QR</button><button class="bad" data-u="${esc(c.userId)}" data-id="${esc(c.id)}">Bekor qilish</button></div></td></tr>`).join('') || '<tr><td colspan="6" class="small">Hali sertifikat yuborilmagan</td></tr>';
+  $('cBody').innerHTML = certs.map(c => `<tr><td><b>${esc(c.id)}</b></td><td>${esc(c.name||'')}<br><span class="small">${esc(c.userId)}</span></td><td>${esc(c.title)}<br><span class="small">${esc(c.reason||'')}${c.auto?' · avtomatik':''}</span></td><td>${esc((TPL[c.tpl]||[c.tpl])[0])}<br><span class="small">${c.fmt==='story'?'📱 9:16':'🖥 16:9'}</span></td><td>${esc(c.date||'')}</td><td><div class="acts"><button class="sec" data-v="${esc(c.id)}">Ko'rish / QR</button><button class="bad" data-u="${esc(c.userId)}" data-id="${esc(c.id)}">Bekor qilish</button></div></td></tr>`).join('') || '<tr><td colspan="6" class="small">Hali sertifikat yuborilmagan</td></tr>';
   $('cBody').querySelectorAll('button[data-v]').forEach(b => b.onclick = () => { const c = certs.find(x => x.id === b.dataset.v); if (c) viewCert(c); });
   $('cBody').querySelectorAll('button.bad').forEach(b => b.onclick = guard(async () => { if (!confirm(b.dataset.id + ' sertifikati bekor qilinsinmi?')) return; await api('revokeCertificate', { userId: b.dataset.u, id: b.dataset.id }); flash('Bekor qilindi'); await load(); }));
 }
-$('cSend').onclick = guard(async () => { const userId = $('cUser').value; if (!userId) return flash('Foydalanuvchini tanlang', false); const r = await api('sendCertificate', { userId, tpl: curTpl, title: $('cTitle').value, reason: $('cReason').value, name: $('cName').value }); flash(`Yuborildi ✅ Raqam: ${r.id}`); $('cTitle').value = $('cReason').value = $('cName').value = ''; await load(); });
+$('cSend').onclick = guard(async () => { const userId = $('cUser').value; if (!userId) return flash('Foydalanuvchini tanlang', false); const r = await api('sendCertificate', { userId, tpl: curTpl, title: $('cTitle').value, reason: $('cReason').value, name: $('cName').value, fmt: $('cFmt').value }); flash(`Yuborildi ✅ Raqam: ${r.id}`); $('cTitle').value = $('cReason').value = $('cName').value = ''; await load(); });
 $('vBtn').onclick = guard(async () => { const r = await api('verifyCertificate', { id: $('vId').value }); $('vRes').innerHTML = r.found ? `<span style="color:#86efac">✔ Haqiqiy:</span> <b>${esc(r.cert.name)}</b> — ${esc(r.cert.title)} · ${esc(r.cert.date)} · ${esc(r.cert.userId)}` : '<span style="color:#fca5a5">✖ Bunday sertifikat topilmadi (yoki bekor qilingan). Eslatma: so\'z bosqichlari uchun avtomatik berilgan sertifikatlar bu yerda ro\'yxatda bo\'lmaydi.</span>'; });
 
 
@@ -736,7 +809,7 @@ async function sendChallengeCerts(id, title) {
     const c = todo[i];
     box.textContent = `«${title}»: sertifikatlar Telegramga yuborilmoqda… ${i + 1} / ${todo.length} (sahifani yopmang)`;
     try {
-      const image = await VBC.certificateBase64({ id: c.id, tpl: c.tpl, title: c.title, reason: c.reason, name: c.name, date: c.date, special: false });
+      const image = await VBC.certificateBase64({ id: c.id, tpl: c.tpl, title: c.title, reason: c.reason, name: c.name, date: c.date, special: false, fmt: c.fmt, stats: c.stats || undefined });
       const d = await api('deliverCert', { userId: c.uid, id: c.id, image });
       if (d.ok) ok++; else fail++;
     } catch (e) { fail++; }
@@ -843,13 +916,13 @@ function gValidUi() { $('gValidBox').style.display = $('gType').value === 'spins
 $('gType').onchange = gValidUi; gValidUi();
 
 /* ---------- sertifikat: ko'rib chiqish, QR, avtomatik matn ---------- */
-const sampleCert = () => ({ id: 'VB-000000', tpl: curTpl, title: $('cTitle').value || 'Sarlavha (yutuq yoki natija)', reason: $('cReason').value || '', name: $('cName').value || (($('cUser').selectedOptions[0] || {}).text || 'F.I.SH.').split(' · ')[0], date: todayStr(), special: true });
+const sampleCert = () => ({ id: 'VB-000000', tpl: curTpl, title: $('cTitle').value || 'Sarlavha (yutuq yoki natija)', reason: $('cReason').value || '', name: $('cName').value || (($('cUser').selectedOptions[0] || {}).text || 'F.I.SH.').split(' · ')[0], date: todayStr(), special: true, fmt: $('cFmt').value, stats: { lvl: 'B1', words: 250, streak: 14 } });
 $('cPreview').onclick = guard(async () => { const c = $('cPv'); c.classList.remove('hide'); await VBC.drawCertificate(c, sampleCert()); });
 async function viewCert(c) {
   $('certView').classList.remove('hide');
   $('cvTitle').textContent = `${c.id} — ${c.name || ''}`;
   const cv = $('cvCanvas');
-  await VBC.drawCertificate(cv, { id: c.id, tpl: c.tpl, title: c.title || '', reason: c.reason || '', name: c.name || '', date: c.date || '', special: !c.auto });
+  await VBC.drawCertificate(cv, { id: c.id, tpl: c.tpl, title: c.title || '', reason: c.reason || '', name: c.name || '', date: c.date || '', special: !c.auto, fmt: c.fmt === 'story' ? 'story' : 'wide', stats: c.stats || undefined });
   $('cvDl').href = cv.toDataURL('image/png'); $('cvDl').download = VBC.certFileName({ id: c.id });
   $('cvUrl').textContent = 'QR kod ochadigan manzil: ' + VBC.certUrl(c.id);
 }
