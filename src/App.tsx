@@ -9,6 +9,7 @@ import { GamesTab, GameScreen } from './components/Games';
 import { SurvivalRun } from './components/SurvivalRun';
 import { LearnSession } from './components/Learn';
 import { LeaderboardTab } from './components/LeaderboardTab';
+import { ShopTab } from './components/ShopTab';
 import { CertificateModal } from './components/CertificateModal';
 import { StreakPopup } from './components/StreakPopup';
 import { LuckyWheel } from './components/LuckyWheel';
@@ -99,6 +100,7 @@ const MainScreen: React.FC = () => {
         {announcement && <AnnouncementBanner text={announcement.text} />}
         {activeTab === 'home' && <HomeTab />}
         {activeTab === 'words' && <WordsTab />}
+        {activeTab === 'shop' && <ShopTab />}
         {activeTab === 'games' && <GamesTab />}
         {activeTab === 'leaderboard' && <LeaderboardTab />}
       </div>

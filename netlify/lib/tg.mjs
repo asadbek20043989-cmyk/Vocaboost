@@ -162,9 +162,19 @@ export async function runBroadcast(opts) {
   const users = (await db('GET', 'tgusers')) || {};
   const lb = opts.skipActiveToday ? (await db('GET', 'leaderboard')) || {} : {};
   const dayStart = tashkentStartOfDayMs();
-  const markup = opts.customButtonsOnly ? makeCustomButtonsMarkup(opts.buttons) : (opts.buttons && opts.buttons.length ? makeCustomButtonsMarkup(opts.buttons) : openAppMarkup());
+  const defaultMarkup = opts.customButtonsOnly ? makeCustomButtonsMarkup(opts.buttons) : (opts.buttons && opts.buttons.length ? makeCustomButtonsMarkup(opts.buttons) : openAppMarkup());
   const parseMode = opts.parseMode || 'HTML';
   const photoUrl = opts.photoUrl ? String(opts.photoUrl).trim() : null;
+
+  let botUsername = '';
+  if (opts.includeRefButton) {
+    try {
+      const me = await tgApi(token, 'getMe', {});
+      botUsername = me?.username || '';
+    } catch {}
+  }
+  const refCfg = opts.includeRefButton ? ((await db('GET', 'config/referral')) || {}) : {};
+  const inviteText = refCfg.inviteText || "🚀 VocaBoost — inglizcha so'zlarni tez va mustahkam yodlang! Menga qo'shiling: ";
 
   const targets = Object.entries(users).filter(([id, u]) => {
     if (!u || u.blocked) return false;
@@ -192,7 +202,27 @@ export async function runBroadcast(opts) {
   let n = 0;
   for (const [id, u] of targets) {
     const name = String(u.name || '').split(' ')[0] || "do'st";
-    const text = String(opts.text).replace(/\{name\}/gi, name);
+    const personalRefLink = botUsername ? `https://t.me/${botUsername}?start=ref_${id}` : '';
+    let text = String(opts.text).replace(/\{name\}/gi, name).replace(/\{ref_link\}/gi, personalRefLink);
+
+    let markup = defaultMarkup;
+    if (opts.includeRefButton && botUsername) {
+      const shareLink = `https://t.me/share/url?url=${encodeURIComponent(personalRefLink)}&text=${encodeURIComponent(inviteText)}`;
+      const refBtnText = String(opts.refBtnText || "👥 Do'stlarni taklif qilish (+50 XP)").slice(0, 40);
+      const rows = [
+        [{ text: refBtnText, url: shareLink }]
+      ];
+      if (opts.buttons && opts.buttons.length) {
+        opts.buttons.slice(0, 2).forEach(b => {
+          if (b?.text && b?.url) rows.push([{ text: String(b.text).slice(0, 40), url: String(b.url).trim() }]);
+        });
+      } else {
+        const openBtn = openAppMarkup();
+        if (openBtn?.inline_keyboard?.[0]) rows.push(openBtn.inline_keyboard[0]);
+      }
+      markup = { inline_keyboard: rows };
+    }
+
     let tries = 0;
     for (;;) {
       try {

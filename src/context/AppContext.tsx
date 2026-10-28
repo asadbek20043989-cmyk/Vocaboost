@@ -33,8 +33,11 @@ import {
   CoreState, CloudCore, mergeCore, mergeSrs, normalizeCore, coreSig, srsSig,
   parseRemoteCore, parseRemoteSrs,
 } from '../services/sync';
+import { DEFAULT_SHOP_ITEMS, DEFAULT_TOP_BOOKS, DEFAULT_LOFI_TRACKS, DEFAULT_REFERRAL_CONFIG } from '../data/shop';
+import { ShopItem, TopBook, LofiTrack, ReferralConfig } from '../types';
+import { botProcessReferral } from '../services/bot';
 
-type TabId = 'home' | 'words' | 'games' | 'leaderboard';
+export type TabId = 'home' | 'words' | 'shop' | 'games' | 'leaderboard';
 /** Streak oynasi: gain — bugungi streak yig'ildi; frozen — bir kun o'tkazib yuborilgan, streak muzlab turibdi */
 export type StreakPopupData =
   | { kind: 'gain'; streak: number; saved: boolean }
@@ -150,6 +153,15 @@ interface AppContextType {
   streakPopup: StreakPopupData | null;
   dismissStreakPopup: () => void;
   addXp: (amount: number) => number;
+  addCoins: (amount: number) => void;
+  // Do'kon va Tangalar
+  shopItems: ShopItem[];
+  books: TopBook[];
+  lofiTracks: LofiTrack[];
+  referralConfig: ReferralConfig;
+  buyShopItem: (item: ShopItem, currency?: 'coins' | 'xp') => { ok: boolean; message: string; prize?: any };
+  isDoubleXpActive: boolean;
+  doubleXpTimeLeft: string;
   aiLeft: number;
   consumeAi: () => boolean;
   blitzLeft: number;
@@ -186,6 +198,18 @@ const INITIAL_PROFILE: UserProfile = {
   wordsPerDay: 10,
   dailyGoalMinutes: 10,
   xp: 0,
+  coins: 50, // boshlang'ich start: do'kondan darhol xarid qilish uchun 50 tanga
+  refCount: 0,
+  refXpEarned: 0,
+  refCoinsEarned: 0,
+  inventory: [],
+  activeFrame: '',
+  activeTitle: '',
+  activeTheme: 'dark',
+  hasCrown: false,
+  hasGlowingNick: false,
+  hasVipCheck: false,
+  doubleXpUntil: 0,
   streak: 0,
   reminderTime: '20:00',
   hasCompletedOnboarding: false,
@@ -556,10 +580,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         streak: isMe ? profile.streak : Number(e.streak) || 0,
         level: (isMe ? profile.level : e.level || 'A1') as EnglishLevel,
         isCurrentUser: isMe,
+        coins: isMe ? (profile.coins ?? 50) : Number(e.coins) || 0,
+        refCount: isMe ? (profile.refCount ?? 0) : Number(e.refCount) || 0,
+        crown: isMe ? !!profile.hasCrown : !!e.crown,
+        glowingNick: isMe ? !!profile.hasGlowingNick : !!e.glowingNick,
+        vipCheck: isMe ? !!profile.hasVipCheck : !!e.vipCheck,
+        titleBadge: isMe ? (profile.activeTitle || '') : (e.titleBadge || ''),
+        frame: isMe ? (profile.activeFrame || '') : (e.frame || ''),
       });
     });
     if (!meSeen && !meHidden) {
-      list.push({ id: myId.current, name: `${profile.name} (Siz)`, avatar: profile.avatar, xp: profile.xp, streak: profile.streak, level: profile.level, isCurrentUser: true });
+      list.push({
+        id: myId.current,
+        name: `${profile.name} (Siz)`,
+        avatar: profile.avatar,
+        xp: profile.xp,
+        streak: profile.streak,
+        level: profile.level,
+        isCurrentUser: true,
+        coins: profile.coins ?? 50,
+        refCount: profile.refCount ?? 0,
+        crown: !!profile.hasCrown,
+        glowingNick: !!profile.hasGlowingNick,
+        vipCheck: !!profile.hasVipCheck,
+        titleBadge: profile.activeTitle || '',
+        frame: profile.activeFrame || '',
+      });
     }
     list.sort((a, b) => b.xp - a.xp);
     return list;
@@ -906,8 +952,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setWheel(p => ({ ...p, proUntil: Math.max(nowMs(), p.proUntil) + amount * 3600000 }));
           pushNotice(`👑 Admin sizga ${amount} soatlik VIP sovg'a qildi`);
         } else if (g.type === 'xp' && amount > 0) {
-          setProfile(p => ({ ...p, xp: p.xp + amount }));
-          pushNotice(`💎 Admin sizga +${amount} XP sovg'a qildi`);
+          setProfile(p => ({ ...p, xp: p.xp + amount, ...(Number((g as any).coins) > 0 ? { coins: (p.coins ?? 50) + Number((g as any).coins) } : {}) }));
+          pushNotice(`💎 Admin sizga +${amount} XP${Number((g as any).coins) > 0 ? ` va +${(g as any).coins} tanga` : ''} sovg'a qildi`);
+        } else if (g.type === 'coins' && amount > 0) {
+          setProfile(p => ({ ...p, coins: (p.coins ?? 50) + amount }));
+          pushNotice(`🪙 Admin sizga +${amount} ta tanga sovg'a qildi`);
         }
         // Eski «xpset» sovg'alari endi qo'llanmaydi: admin XP o'zgartirishi Liga yozuvidagi `adj` orqali (farq sifatida) ishlaydi.
       });
@@ -966,15 +1015,220 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setProfile(p => (v <= (p.adjV || 0) ? p : { ...p, xp: Math.max(0, p.xp + delta), adjV: v, adjApplied: adj, updatedAt: nowMs() }));
   }, [leagueRaw, syncReady, profile.hasCompletedOnboarding, profile.adjV]);
 
+  const isDoubleXpActive = Boolean(profile.doubleXpUntil && profile.doubleXpUntil > now);
+
+  const doubleXpTimeLeft = useMemo(() => {
+    if (!profile.doubleXpUntil || profile.doubleXpUntil <= now) return '';
+    const diffSec = Math.max(0, Math.floor((profile.doubleXpUntil - now) / 1000));
+    const hours = Math.floor(diffSec / 3600);
+    const mins = Math.floor((diffSec % 3600) / 60);
+    const secs = diffSec % 60;
+    if (hours > 0) return `${hours}s ${mins}d`;
+    return `${mins}d ${secs < 10 ? '0' : ''}${secs}s`;
+  }, [profile.doubleXpUntil, now]);
+
   const applyXpMultiplier = (amount: number): number => {
-    if (!wheel.doubleXpPending || amount <= 0) return amount;
+    if (amount <= 0) return amount;
+    if (profile.doubleXpUntil && profile.doubleXpUntil > nowMs()) {
+      return amount * 2;
+    }
+    if (!wheel.doubleXpPending) return amount;
     setWheel(p => ({ ...p, doubleXpPending: false }));
     return amount * 2;
   };
+
   const addXp = (amount: number): number => {
     const gained = applyXpMultiplier(amount);
-    setProfile(p => ({ ...p, xp: p.xp + gained }));
+    // Tanga topish: XP ning 1/2 qismi (PDF 1-sahifa: "XP topilganda: XP ning 1/2 qismi")
+    const coinGain = Math.max(1, Math.floor(gained / 2));
+    setProfile(p => ({
+      ...p,
+      xp: p.xp + gained,
+      coins: (p.coins ?? 50) + coinGain,
+      updatedAt: nowMs(),
+    }));
     return gained;
+  };
+
+  const addCoins = (amount: number): void => {
+    if (amount <= 0) return;
+    setProfile(p => ({ ...p, coins: (p.coins ?? 50) + amount, updatedAt: nowMs() }));
+  };
+
+  // Do'kon mahsulotlari (Admin paneldan o'zgartiriladigan yoki standart)
+  const shopItems: ShopItem[] = useMemo(() => {
+    const raw = config?.shop;
+    if (!raw || typeof raw !== 'object') return DEFAULT_SHOP_ITEMS;
+    const list: ShopItem[] = [];
+    const keys = new Set<string>();
+    Object.entries(raw).forEach(([id, it]: [string, any]) => {
+      if (it && it.title) {
+        list.push({ ...it, id });
+        keys.add(id);
+      }
+    });
+    DEFAULT_SHOP_ITEMS.forEach(d => {
+      if (!keys.has(d.id)) list.push(d);
+    });
+    return list;
+  }, [config?.shop]);
+
+  const books: TopBook[] = useMemo(() => {
+    const raw = config?.books;
+    if (!raw || typeof raw !== 'object') return DEFAULT_TOP_BOOKS;
+    const list: TopBook[] = [];
+    const keys = new Set<string>();
+    Object.entries(raw).forEach(([id, b]: [string, any]) => {
+      if (b && b.title) {
+        list.push({ ...b, id });
+        keys.add(id);
+      }
+    });
+    DEFAULT_TOP_BOOKS.forEach(d => {
+      if (!keys.has(d.id)) list.push(d);
+    });
+    return list;
+  }, [config?.books]);
+
+  const lofiTracks: LofiTrack[] = useMemo(() => {
+    const raw = config?.lofi;
+    if (!raw || typeof raw !== 'object') return DEFAULT_LOFI_TRACKS;
+    const list: LofiTrack[] = [];
+    const keys = new Set<string>();
+    Object.entries(raw).forEach(([id, tr]: [string, any]) => {
+      if (tr && tr.src) {
+        list.push({ ...tr, id });
+        keys.add(id);
+      }
+    });
+    DEFAULT_LOFI_TRACKS.forEach(d => {
+      if (!keys.has(d.id)) list.push(d);
+    });
+    return list;
+  }, [config?.lofi]);
+
+  const referralConfig: ReferralConfig = useMemo(() => {
+    const raw = config?.referral;
+    if (!raw) return DEFAULT_REFERRAL_CONFIG;
+    return {
+      rewardXp: Number.isFinite(Number(raw.rewardXp)) ? Number(raw.rewardXp) : DEFAULT_REFERRAL_CONFIG.rewardXp,
+      rewardCoins: Number.isFinite(Number(raw.rewardCoins)) ? Number(raw.rewardCoins) : DEFAULT_REFERRAL_CONFIG.rewardCoins,
+      inviteText: raw.inviteText || DEFAULT_REFERRAL_CONFIG.inviteText,
+    };
+  }, [config?.referral]);
+
+  // Mini App start havolasi orqali kirgan do'stni qayd etish
+  useEffect(() => {
+    const sp = getStartParam();
+    if (sp && sp.startsWith('ref_') && isTelegram) {
+      const seenKey = 'vb_ref_claimed_' + sp;
+      if (!lsGet(seenKey)) {
+        botProcessReferral(sp)
+          .then(res => {
+            if (res?.ok) {
+              lsSet(seenKey, '1');
+              pushNotice("🎉 Do'stingiz taklif havolasi orqali qo'shildingiz!");
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [isTelegram]);
+
+  // Do'kondan xarid qilish (tangalar yoki XP bilan) — darhol taqdim etiladi
+  const buyShopItem = (item: ShopItem, currency: 'coins' | 'xp' = 'coins'): { ok: boolean; message: string; prize?: any } => {
+    const price = currency === 'xp' ? (item.priceXp || 999999) : item.priceCoins;
+    const currentBalance = currency === 'xp' ? profile.xp : (profile.coins ?? 50);
+
+    if (currentBalance < price) {
+      triggerHaptic('error');
+      return { ok: false, message: `Mablag‘ yetarli emas! Sizda ${currentBalance} ${currency === 'xp' ? 'XP' : 'tanga'} mavjud, mahsulot narxi: ${price} ${currency === 'xp' ? 'XP' : 'tanga'}.` };
+    }
+
+    triggerHaptic('success');
+    sfx.play('correct');
+
+    const updatedCoins = currency === 'coins' ? (profile.coins ?? 50) - price : (profile.coins ?? 50);
+    const updatedXp = currency === 'xp' ? Math.max(0, profile.xp - price) : profile.xp;
+    const currentInventory = profile.inventory || [];
+    let updatedInventory = currentInventory.includes(item.id) ? currentInventory : [...currentInventory, item.id];
+    let profileUpdates: Partial<UserProfile> = { coins: updatedCoins, xp: updatedXp, inventory: updatedInventory };
+    let prizeResult: any = null;
+
+    if (item.id === 'xp_boost_1h') {
+      const until = Math.max(nowMs(), profile.doubleXpUntil || 0) + 3600 * 1000;
+      profileUpdates.doubleXpUntil = until;
+      pushNotice('⚡ 2x XP (1 soat) faollashdi!');
+    } else if (item.id === 'xp_boost_24h') {
+      const until = Math.max(nowMs(), profile.doubleXpUntil || 0) + 24 * 3600 * 1000;
+      profileUpdates.doubleXpUntil = until;
+      pushNotice('🚀 2x XP (24 soat) faollashdi!');
+    } else if (item.id === 'streak_saver') {
+      setWheel(w => ({ ...w, streakSavers: w.streakSavers + 1 }));
+      pushNotice('🛡️ Streak himoyasi balansingizga qo‘shildi!');
+    } else if (item.id === 'frame_golden') {
+      profileUpdates.activeFrame = 'golden';
+      pushNotice('🖼️ Oltin profil ramkasi o‘rnatildi!');
+    } else if (item.id === 'frame_fire') {
+      profileUpdates.activeFrame = 'fire';
+      pushNotice('🔥 Olovli profil ramkasi o‘rnatildi!');
+    } else if (item.id === 'frame_crystal') {
+      profileUpdates.activeFrame = 'crystal';
+      pushNotice('💎 Kristall profil ramkasi o‘rnatildi!');
+    } else if (item.id === 'leaderboard_crown') {
+      profileUpdates.hasCrown = true;
+      pushNotice('👑 Profilingiz ustiga toj belgisi o‘rnatildi!');
+    } else if (item.id === 'gradient_nick') {
+      profileUpdates.hasGlowingNick = true;
+      pushNotice('🌈 Reytingda ismingiz yaltiroq gradient rangda porlay boshladi!');
+    } else if (item.id === 'vip_badge') {
+      profileUpdates.hasVipCheck = true;
+      pushNotice('✅ VIP tasdiqlangan (galochka) maqomi berildi!');
+    } else if (item.id.startsWith('theme_')) {
+      const th = item.id.replace('theme_', '');
+      profileUpdates.activeTheme = th;
+      pushNotice(`🎨 "${item.title}" interfeys mavzusi tanlandi!`);
+    } else if (item.id.startsWith('custom_title_')) {
+      const titleName = item.title.replace('Maxsus unvon: ', '').replace(/«|»/g, '');
+      profileUpdates.activeTitle = titleName;
+      pushNotice(`🏅 Profil unvoni: «${titleName}» o‘rnatildi!`);
+    } else if (item.id === 'wheel_spins_3') {
+      setWheel(w => ({ ...w, bonusSpins: w.bonusSpins + 3 }));
+      pushNotice('🎡 Barabanga +3 ta qo‘shimcha aylantirish qo‘shildi!');
+    } else if (item.id === 'mystery_box') {
+      const rnd = Math.random();
+      if (rnd < 0.35) {
+        const bonusXp = 100 + Math.floor(Math.random() * 200);
+        profileUpdates.xp = updatedXp + bonusXp;
+        prizeResult = { type: 'xp', amount: bonusXp, text: `+${bonusXp} XP` };
+        pushNotice(`🎁 Sirli qutidan: +${bonusXp} XP chiqdi!`);
+      } else if (rnd < 0.65) {
+        const bonusCoins = 50 + Math.floor(Math.random() * 100);
+        profileUpdates.coins = updatedCoins + bonusCoins;
+        prizeResult = { type: 'coins', amount: bonusCoins, text: `+${bonusCoins} Tanga` };
+        pushNotice(`🎁 Sirli qutidan: +${bonusCoins} Tanga chiqdi!`);
+      } else if (rnd < 0.85) {
+        setWheel(w => ({ ...w, bonusSpins: w.bonusSpins + 2 }));
+        prizeResult = { type: 'spins', amount: 2, text: '+2 ta Baraban aylantirish' };
+        pushNotice('🎁 Sirli qutidan: +2 ta Baraban aylantirish chiqdi!');
+      } else {
+        const until = Math.max(nowMs(), profile.doubleXpUntil || 0) + 3600 * 1000;
+        profileUpdates.doubleXpUntil = until;
+        prizeResult = { type: 'booster', text: '⚡ 2x XP (1 soat)' };
+        pushNotice('🎁 Sirli qutidan: 2x XP (1 soat) chiqdi!');
+      }
+    } else if (item.id === 'telegram_premium') {
+      pushNotice('⭐ Telegram Premium / Stars so‘rovingiz yuborildi. Admin siz bilan bog‘lanadi.');
+    } else if (item.id === 'top_books') {
+      pushNotice('📘 Inglizcha TOP kitoblar to‘plami ochildi!');
+    } else if (item.id === 'lofi_music') {
+      pushNotice('🎧 Lo-Fi musiqa pleyeri ochildi!');
+    } else if (item.id === 'premium_words_pack') {
+      pushNotice('📚 Premium so‘zlar to‘plami ochildi!');
+    }
+
+    setProfile(p => ({ ...p, ...profileUpdates, updatedAt: nowMs() }));
+    return { ok: true, message: `"${item.title}" muvaffaqiyatli xarid qilindi va darhol berildi!`, prize: prizeResult };
   };
 
   // ---------- streak ----------
@@ -1094,10 +1348,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       joined: profile.joinedAt || '',
       lr: profile.lastReadDate || '', // oxirgi mashq kuni — bot streak haqida oldindan ogohlantirishi uchun
       sv: wheel.streakSavers || 0, // muzlatish (streak saver) soni
+      coins: profile.coins ?? 50,
+      refCount: profile.refCount ?? 0,
+      crown: !!profile.hasCrown,
+      glowingNick: !!profile.hasGlowingNick,
+      vipCheck: !!profile.hasVipCheck,
+      titleBadge: profile.activeTitle || '',
+      frame: profile.activeFrame || '',
       ts: 0,
     };
     if (!lbTimer.current) lbTimer.current = setTimeout(() => flushLb(), lbLastSig.current ? LB_THROTTLE_MS : 2000);
-  }, [profile.xp, profile.name, profile.avatar, profile.streak, profile.level, profile.wordsPerDay, profile.username, profile.joinedAt, profile.lastReadDate, wheel.streakSavers, profile.hasCompletedOnboarding, savedWords.length, masteredCount, syncReady, grantsReady, lbGate, leagueRaw, profile.adjV]);
+  }, [profile.xp, profile.coins, profile.refCount, profile.hasCrown, profile.hasGlowingNick, profile.hasVipCheck, profile.activeTitle, profile.activeFrame, profile.name, profile.avatar, profile.streak, profile.level, profile.wordsPerDay, profile.username, profile.joinedAt, profile.lastReadDate, wheel.streakSavers, profile.hasCompletedOnboarding, savedWords.length, masteredCount, syncReady, grantsReady, lbGate, leagueRaw, profile.adjV]);
   useEffect(() => {
     const onHide = () => document.visibilityState === 'hidden' && flushLb(true);
     const onPageHide = () => flushLb(true);
@@ -1185,7 +1446,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const t = todayKey();
     if (profile.bonusDays.includes(t)) return 0;
     const xp = applyXpMultiplier(settings.xpDailyBonus);
-    setProfile(p => ({ ...p, xp: p.xp + xp, bonusDays: [...p.bonusDays.slice(-30), t] }));
+    setProfile(p => ({ ...p, xp: p.xp + xp, coins: (p.coins ?? 50) + 5, bonusDays: [...p.bonusDays.slice(-30), t] }));
     triggerHaptic('success');
     return xp;
   };
@@ -1210,7 +1471,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const already = profile.gameXp[id] === t;
     if (already) return { xp: 0, passed, already: true };
     const xp = applyXpMultiplier(g.xp);
-    setProfile(p => ({ ...p, xp: p.xp + xp, gameXp: { ...p.gameXp, [id]: t } }));
+    const coins = Math.max(2, Math.floor(xp / 2));
+    setProfile(p => ({ ...p, xp: p.xp + xp, coins: (p.coins ?? 50) + coins, gameXp: { ...p.gameXp, [id]: t } }));
     setGamesPlayed(n => n + 1);
     bumpQuest('play_game');
     if (correct === total) bumpQuest('perfect_round');
@@ -1789,7 +2051,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     triggerHaptic('success');
     sfx.win(false);
     addXp(quest.xpReward);
-    setQuestState(prev => ({ ...prev, quests: prev.quests.map(q => (q.id === questId ? { ...q, claimed: true } : q)) }));
+    const questCoins = Math.max(3, Math.floor(quest.xpReward / 2));
+    const nextQuests = questState.quests.map(q => (q.id === questId ? { ...q, claimed: true } : q));
+    const allDone = nextQuests.length > 0 && nextQuests.every(q => q.claimed);
+    const extraCoins = allDone ? 15 : 0;
+    if (extraCoins > 0) {
+      pushNotice('🌟 Barcha kunlik topshiriqlar bajarildi! +15 Tanga bonus berildi!');
+    }
+    addCoins(questCoins + extraCoins);
+    setQuestState(prev => ({ ...prev, quests: nextQuests }));
   };
 
   const resetProgress = () => {
@@ -1828,7 +2098,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         resetProgress, claimQuest, wheel: w, wheelPrizes: wheelCfg.prizes, wheelFreeSpins: wheelCfg.freeSpins,
         freeSpinsLeft, totalSpinsLeft, isPro, spinWheel, applyPrize, grantReferralSpin, leagueUsers, leagueLive, challengesLive,
         realtimeOn: realtimeEnabled, announcement, leagueWeek, certificates, certificateView, showCertificate: setCertificateView,
-        notice, streakPopup, dismissStreakPopup, addXp, aiLeft, consumeAi, blitzLeft, consumeBlitz, markWritingDone, today, syncReady, accountId: myId.current, isTelegram, linkAccount,
+        notice, streakPopup, dismissStreakPopup, addXp, addCoins, shopItems, books, lofiTracks, referralConfig, buyShopItem, isDoubleXpActive, doubleXpTimeLeft, aiLeft, consumeAi, blitzLeft, consumeBlitz, markWritingDone, today, syncReady, accountId: myId.current, isTelegram, linkAccount,
       }}
     >
       {children}

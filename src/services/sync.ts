@@ -98,6 +98,18 @@ export function mergeProfile(a: UserProfile, b: UserProfile): UserProfile {
   out.bonusDays = uniqSorted([...arr(a.bonusDays), ...arr(b.bonusDays)]).slice(-40);
   out.milestones = uniqSorted([...arr(a.milestones), ...arr(b.milestones)].map(Number));
   out.sentCerts = uniqSorted([...arr(a.sentCerts), ...arr(b.sentCerts)]).slice(-60);
+  out.coins = Math.max(a.coins || 0, b.coins || 0);
+  out.refCount = Math.max(a.refCount || 0, b.refCount || 0);
+  out.refXpEarned = Math.max(a.refXpEarned || 0, b.refXpEarned || 0);
+  out.refCoinsEarned = Math.max(a.refCoinsEarned || 0, b.refCoinsEarned || 0);
+  out.inventory = uniqSorted([...arr(a.inventory), ...arr(b.inventory)]) as string[];
+  out.activeFrame = base.activeFrame || other.activeFrame || '';
+  out.activeTitle = base.activeTitle || other.activeTitle || '';
+  out.activeTheme = base.activeTheme || other.activeTheme || '';
+  out.hasCrown = !!(a.hasCrown || b.hasCrown);
+  out.hasGlowingNick = !!(a.hasGlowingNick || b.hasGlowingNick);
+  out.hasVipCheck = !!(a.hasVipCheck || b.hasVipCheck);
+  out.doubleXpUntil = Math.max(a.doubleXpUntil || 0, b.doubleXpUntil || 0);
   out.writingDays = uniqSorted([...arr(a.writingDays), ...arr(b.writingDays)]).slice(-12);
 
   const gx: Record<string, string> = { ...(a.gameXp || {}) };
@@ -260,6 +272,12 @@ export function parseRemoteCore(raw: any, initial: { profile: UserProfile; wheel
     sentCerts: arr(rp.sentCerts).map(String),
     writingDays: arr(rp.writingDays).map(String),
     xpSets: arr(rp.xpSets).map(String),
+    inventory: arr(rp.inventory).map(String),
+    coins: Number.isFinite(Number(rp.coins)) ? Number(rp.coins) : initial.profile.coins || 50,
+    refCount: Number(rp.refCount) || 0,
+    refXpEarned: Number(rp.refXpEarned) || 0,
+    refCoinsEarned: Number(rp.refCoinsEarned) || 0,
+    doubleXpUntil: Number(rp.doubleXpUntil) || 0,
     gameXp: rp.gameXp || {},
   };
   const badges = arr(raw.badges) as AchievementBadge[];

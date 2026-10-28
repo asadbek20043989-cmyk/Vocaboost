@@ -57,10 +57,15 @@ export interface PodiumUser {
   name: string;
   avatar?: string;
   xp: number;
+  refCount?: number;
+  frame?: string;
+  crown?: boolean;
+  vipCheck?: boolean;
+  glowingNick?: boolean;
 }
 
 /** TOP-3 podiumi: 2-1-3 tartibida, pastida pog'onalar. `badges` — haftalik chempionlik soni (ixtiyoriy) */
-export const Podium: React.FC<{ users: PodiumUser[]; badges?: Record<string, { gold: number; top3: number }> }> = ({ users, badges }) => {
+export const Podium: React.FC<{ users: PodiumUser[]; badges?: Record<string, { gold: number; top3: number }>; mode?: 'xp' | 'referral' }> = ({ users, badges, mode = 'xp' }) => {
   const order: Rank[] = [2, 1, 3];
   return (
     <div className="flex items-end justify-center gap-2 pt-2">
@@ -72,9 +77,14 @@ export const Podium: React.FC<{ users: PodiumUser[]; badges?: Record<string, { g
         return (
           <div key={rank} className="flex flex-col items-center w-[31%] min-w-0">
             <GlowAvatar rank={rank} src={u.avatar} name={u.name} />
-            <span className={`mt-2 text-xs font-extrabold text-white max-w-full truncate text-center ${rank === 1 ? 'text-sm' : ''}`}>{u.name}</span>
-            {b && b.gold > 0 && <span className="text-[10px] font-bold text-amber-300">🏆 ×{b.gold} hafta chempioni</span>}
-            <span className={`text-[11px] font-mono font-extrabold tabular-nums ${t.text}`}>{u.xp.toLocaleString()} XP</span>
+            <div className="flex items-center gap-1 max-w-full justify-center mt-2">
+              <span className={`text-xs font-extrabold max-w-full truncate text-center ${rank === 1 ? 'text-sm' : ''} ${u.glowingNick ? 'bg-gradient-to-r from-amber-300 via-rose-300 to-amber-200 bg-clip-text text-transparent font-black' : 'text-white'}`}>{u.name}</span>
+              {u.vipCheck && <span className="w-3 h-3 rounded-full bg-sky-500 text-white text-[8px] flex items-center justify-center font-black shrink-0">✓</span>}
+            </div>
+            {b && b.gold > 0 && <span className="text-[10px] font-bold text-amber-300">🏆 ×{b.gold} hafta</span>}
+            <span className={`text-[11px] font-mono font-extrabold tabular-nums ${t.text}`}>
+              {mode === 'referral' ? `${(u.refCount || 0).toLocaleString()} ta do'st` : `${u.xp.toLocaleString()} XP`}
+            </span>
             <div className={`pd-base mt-1.5 w-full rounded-t-xl bg-gradient-to-b ${t.bar} flex items-center justify-center shadow-lg`} style={{ height: t.h }}>
               <span className="text-2xl font-black text-black/55 drop-shadow-sm">{t.label}</span>
             </div>

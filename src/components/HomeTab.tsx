@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Flame, Diamond, Play, CheckCircle2, Sparkles, Crown, Zap, Snowflake, Swords, BookMarked } from 'lucide-react';
+import { Flame, Diamond, Play, CheckCircle2, Sparkles, Crown, Zap, Snowflake, Swords, BookMarked, Coins, UserPlus, ShoppingBag } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { useApp } from '../context/AppContext';
 import { triggerHaptic } from '../services/telegram';
@@ -61,18 +61,48 @@ export const HomeTab: React.FC = () => {
       {/* Header */}
       <header className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <Avatar src={profile.avatar} name={profile.name} className="w-11 h-11 border border-slate-700" />
+          <Avatar
+            src={profile.avatar}
+            name={profile.name}
+            frame={profile.activeFrame}
+            crown={profile.hasCrown}
+            className="w-12 h-12 border border-slate-700"
+          />
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold text-white truncate">{profile.name}</h1>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h1 className={`text-base font-bold truncate ${profile.hasGlowingNick ? 'bg-gradient-to-r from-amber-300 via-rose-300 to-amber-200 bg-clip-text text-transparent font-black drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]' : 'text-white'}`}>
+                {profile.name}
+              </h1>
+              {profile.hasVipCheck && (
+                <span className="w-4 h-4 rounded-full bg-sky-500 text-white text-[10px] flex items-center justify-center font-black shrink-0" title="VIP foydalanuvchi">✓</span>
+              )}
               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30">{profile.level}</span>
             </div>
-            <p className="text-[11px] text-slate-400">Kuniga {profile.wordsPerDay} ta yangi so&apos;z</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              {profile.activeTitle && (
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-gradient-to-r from-amber-500/20 to-purple-500/20 border border-amber-400/40 text-amber-300">
+                  {profile.activeTitle}
+                </span>
+              )}
+              <p className="text-[11px] text-slate-400">Kuniga {profile.wordsPerDay} ta yangi so&apos;z</p>
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-bold tabular-nums"><Flame className="w-3.5 h-3.5" /> {profile.streak}</div>
-          <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold tabular-nums"><Diamond className="w-3.5 h-3.5" /> {profile.xp} XP</div>
+        <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-bold tabular-nums">
+            <Flame className="w-3.5 h-3.5" /> {profile.streak}
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab('shop')}
+            className="flex items-center gap-1 px-2 py-1 rounded-full bg-yellow-500/15 border border-yellow-500/40 text-yellow-300 text-xs font-bold tabular-nums hover:scale-105 transition-transform"
+            title="Tangalar balansi. Do'konga o'tish"
+          >
+            <Coins className="w-3.5 h-3.5 text-yellow-400" /> {profile.coins ?? 50}
+          </button>
+          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold tabular-nums">
+            <Diamond className="w-3.5 h-3.5" /> {profile.xp} XP
+          </div>
         </div>
       </header>
 
@@ -186,6 +216,40 @@ export const HomeTab: React.FC = () => {
           className="shrink-0 px-3.5 py-2 rounded-xl bg-amber-500 text-slate-950 text-xs font-extrabold active:scale-95 transition-all shadow-md shadow-amber-500/20"
         >
           O‘qish →
+        </button>
+      </div>
+
+      {/* Do'stlarni taklif qilish va do'kon tezkor bloki */}
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            triggerHaptic('selection');
+            try { sessionStorage.setItem('vb_liga_sub', 'referral'); } catch { /* ignore */ }
+            setActiveTab('leaderboard');
+          }}
+          className="p-3.5 rounded-2xl bg-gradient-to-br from-indigo-900/40 to-purple-900/40 border border-indigo-500/30 text-left hover:border-indigo-400/60 active:scale-[0.98] transition-all group"
+        >
+          <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+            <UserPlus className="w-5 h-5" />
+          </div>
+          <div className="text-xs font-black text-white">Do‘stlarni taklif et</div>
+          <div className="text-[10px] text-indigo-300 font-bold mt-0.5">+50 XP & +30 Tanga</div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            triggerHaptic('selection');
+            setActiveTab('shop');
+          }}
+          className="p-3.5 rounded-2xl bg-gradient-to-br from-amber-900/40 to-yellow-900/40 border border-amber-500/30 text-left hover:border-amber-400/60 active:scale-[0.98] transition-all group"
+        >
+          <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+            <ShoppingBag className="w-5 h-5" />
+          </div>
+          <div className="text-xs font-black text-white">VocaBoost Do‘koni</div>
+          <div className="text-[10px] text-amber-300 font-bold mt-0.5">2x XP, Kitoblar, Lo-Fi</div>
         </button>
       </div>
 

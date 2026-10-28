@@ -442,6 +442,8 @@ export const handler = async event => {
             photoUrl,
             buttons,
             customButtonsOnly: true,
+            includeRefButton: !!body.includeRefButton,
+            refBtnText: body.refBtnText || "👥 Do'stlarni taklif qilish (+50 XP)",
             kind: 'ad',
             parseMode: 'HTML',
           }),
@@ -528,17 +530,144 @@ export const handler = async event => {
         return json(200, { items });
       }
 
-      // ---------- Sovg'alar ----------
+      // ---------- Sovg'alar va Tangalar ----------
       case 'grant': {
-        const { userId, type, amount, note } = body;
-        if (!ID_RE.test(userId || '')) return json(400, { error: 'Foydalanuvchi ID xato' });
-        if (!['spins', 'vip', 'xp'].includes(type)) return json(400, { error: 'Tur xato' });
+        const { userId, type, amount, note, toAllReferrers } = body;
+        if (!['spins', 'vip', 'xp', 'coins'].includes(type)) return json(400, { error: 'Tur xato' });
         const n = Math.round(Number(amount));
-        if (!(n > 0) || n > (type === 'xp' ? 5000 : type === 'vip' ? 720 : 50)) return json(400, { error: 'Miqdor noto\'g\'ri' });
-        // Aylantirish sovg'asi amal qilish muddati (soat): 0 — foydalanilguncha. Boshqa turlar uchun ahamiyatsiz.
+        const maxAmount = type === 'coins' ? 500000 : type === 'xp' ? 50000 : type === 'vip' ? 720 : 100;
+        if (!(n > 0) || n > maxAmount) return json(400, { error: 'Miqdor noto\'g\'ri' });
         const validHours = type === 'spins' ? Math.max(0, Math.min(24 * 60, Math.round(Number(body.validHours ?? 24) || 0))) : 0;
-        await call('PUT', `grants/${userId}/${newGid()}`, { type, amount: n, validHours, note: String(note || '').slice(0, 80), ts: Date.now() });
-        await flagGrant(userId); // ilova faqat shu bayroq bo'lsagina serverga so'rov yuboradi (Netlify krediti tejaladi)
+
+        // Agar "Barcha targ'ibotchilarga" (do'stini taklif qilganlarga) yuborish tanlangan bo'lsa
+        if (toAllReferrers || userId === 'all_referrers') {
+          const lb = (await call('GET', 'leaderboard')) || {};
+          const referrers = Object.entries(lb).filter(([, u]) => u && Number(u.refCount) > 0 && !u.deleted);
+          let grantedCount = 0;
+          for (const [uid, u] of referrers) {
+            const gid = newGid();
+            await call('PUT', `grants/${uid}/${gid}`, { type, amount: n, validHours, note: String(note || "Targ'ibotchi uchun maxsus sovg'a").slice(0, 80), ts: Date.now() });
+            if (type === 'coins') {
+              await call('PATCH', `leaderboard/${uid}`, { coins: (Number(u.coins) || 0) + n });
+            }
+            await flagGrant(uid);
+            grantedCount++;
+            if (process.env.BOT_TOKEN && /^tg_\d+$/.test(uid)) {
+              try {
+                const label = type === 'coins' ? `${n} tanga` : type === 'xp' ? `${n} XP` : type === 'spins' ? `${n} ta baraban aylantirish` : `${n} soat VIP`;
+                await sendMessage(process.env.BOT_TOKEN, Number(uid.slice(3)), `🎁 <b>Admin sovg‘asi!</b>\n\nDo‘stlarni taklif qilganingiz uchun sizga <b>+${label}</b> taqdim etildi!\n${note ? `\n<i>${note}</i>` : ''}`, openAppMarkup());
+              } catch {}
+            }
+          }
+          return json(200, { ok: true, grantedCount });
+        }
+
+        if (!ID_RE.test(userId || '')) return json(400, { error: 'Foydalanuvchi ID xato' });
+        const gid = newGid();
+        await call('PUT', `grants/${userId}/${gid}`, { type, amount: n, validHours, note: String(note || '').slice(0, 80), ts: Date.now() });
+        if (type === 'coins') {
+          const curU = (await call('GET', `leaderboard/${userId}`)) || {};
+          await call('PATCH', `leaderboard/${userId}`, { coins: (Number(curU.coins) || 0) + n });
+        }
+        await flagGrant(userId);
+
+        if (process.env.BOT_TOKEN && /^tg_\d+$/.test(userId)) {
+          try {
+            const label = type === 'coins' ? `${n} tanga` : type === 'xp' ? `${n} XP` : type === 'spins' ? `${n} ta baraban aylantirish` : `${n} soat VIP`;
+            await sendMessage(process.env.BOT_TOKEN, Number(userId.slice(3)), `🎁 <b>Admin sovg‘asi!</b>\n\nSizga <b>+${label}</b> taqdim etildi!\n${note ? `\n<i>${note}</i>` : ''}`, openAppMarkup());
+          } catch {}
+        }
+        return json(200, { ok: true });
+      }
+
+      // ---------- Referral (Do'stlarni taklif qilish) sozlamalari ----------
+      case 'getReferralConfig': {
+        const cfg = (await call('GET', 'config/referral')) || {};
+        return json(200, {
+          rewardXp: Number.isFinite(Number(cfg.rewardXp)) ? Number(cfg.rewardXp) : 50,
+          rewardCoins: Number.isFinite(Number(cfg.rewardCoins)) ? Number(cfg.rewardCoins) : 30,
+          inviteText: cfg.inviteText || "🚀 VocaBoost — inglizcha so'zlarni tez va mustahkam yodlash ilovasi!\n\nMenga qo'shiling, so'zlarni o'rganing va har kuni sovrinlar yutib oling! Do'stlik linkim orqali kirsangiz, sizga ham bonus beriladi: 👇",
+        });
+      }
+
+      case 'setReferralConfig': {
+        const rewardXp = Math.max(0, Math.min(5000, Number(body.rewardXp) || 50));
+        const rewardCoins = Math.max(0, Math.min(5000, Number(body.rewardCoins) || 30));
+        const inviteText = String(body.inviteText || '').trim().slice(0, 1000);
+        await call('PUT', 'config/referral', { rewardXp, rewardCoins, inviteText, updatedAt: Date.now() });
+        return json(200, { ok: true });
+      }
+
+      // ---------- Do'kon (Shop) boshqaruvi ----------
+      case 'getShopConfig': {
+        const items = (await call('GET', 'config/shop')) || null;
+        return json(200, { items });
+      }
+
+      case 'saveShopItem': {
+        const item = body.item;
+        if (!item || !item.id || !item.title) return json(400, { error: "Mahsulot ma'lumotlari to'liq emas" });
+        await call('PUT', `config/shop/${item.id}`, {
+          ...item,
+          priceCoins: Math.max(0, Number(item.priceCoins) || 0),
+          priceXp: Math.max(0, Number(item.priceXp) || 0),
+          discountPct: Math.min(90, Math.max(0, Number(item.discountPct) || 0)),
+          isActive: item.isActive !== false,
+          updatedAt: Date.now(),
+        });
+        return json(200, { ok: true });
+      }
+
+      case 'deleteShopItem': {
+        if (!body.id) return json(400, { error: 'ID kerak' });
+        await call('DELETE', `config/shop/${body.id}`);
+        return json(200, { ok: true });
+      }
+
+      case 'saveAllShopItems': {
+        if (!Array.isArray(body.items)) return json(400, { error: 'Items array kerak' });
+        const obj = {};
+        for (const it of body.items) {
+          if (it && it.id) obj[it.id] = it;
+        }
+        await call('PUT', 'config/shop', obj);
+        return json(200, { ok: true });
+      }
+
+      // ---------- Kitoblar va Lo-Fi musiqa ----------
+      case 'getBooks': {
+        const books = (await call('GET', 'config/books')) || null;
+        return json(200, { books });
+      }
+
+      case 'saveBook': {
+        const b = body.book;
+        if (!b || !b.id || !b.title) return json(400, { error: "Kitob ma'lumotlari to'liq emas" });
+        await call('PUT', `config/books/${b.id}`, { ...b, updatedAt: Date.now() });
+        return json(200, { ok: true });
+      }
+
+      case 'deleteBook': {
+        if (!body.id) return json(400, { error: 'ID kerak' });
+        await call('DELETE', `config/books/${body.id}`);
+        return json(200, { ok: true });
+      }
+
+      case 'getLofi': {
+        const tracks = (await call('GET', 'config/lofi')) || null;
+        return json(200, { tracks });
+      }
+
+      case 'saveLofiTrack': {
+        const tr = body.track;
+        if (!tr || !tr.id || !tr.src) return json(400, { error: "Trek ma'lumotlari to'liq emas" });
+        await call('PUT', `config/lofi/${tr.id}`, { ...tr, updatedAt: Date.now() });
+        return json(200, { ok: true });
+      }
+
+      case 'deleteLofiTrack': {
+        if (!body.id) return json(400, { error: 'ID kerak' });
+        await call('DELETE', `config/lofi/${body.id}`);
         return json(200, { ok: true });
       }
 

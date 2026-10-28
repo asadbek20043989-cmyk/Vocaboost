@@ -36,7 +36,7 @@ export const TEMPLATES: Record<string, Tpl> = {
   silver: { name: 'Kumush', ribbonText: 'KUMUSH', deco: 'silver', frame: ['#E8F1F8', '#A9C3D9', '#5F7C95'], accent: '#C9D8E6', head: ['#FFFFFF', '#9FB4C7'], ribbon: ['#E6ECF2', '#A9B6C3', '#6B7886'], ribbonInk: '#1B2530', nameGrad: ['#F4F8FC', '#9FB1C4'], wreath: '#C3D0DC' },
   gold: { name: 'Oltin', ribbonText: 'OLTIN', deco: 'gold', frame: ['#FFE58A', '#F2B705', '#A8730A'], accent: '#F5C21B', head: ['#FFE98F', '#D79B0A'], ribbon: ['#FFE079', '#E6A912', '#9A6A08'], ribbonInk: '#2E1F02', nameGrad: ['#FFE48A', '#D9A10E'], wreath: '#E9B820' },
   platinum: { name: 'Platina', ribbonText: 'PLATINA', deco: 'platinum', frame: ['#D4EEFF', '#8EC5E8', '#3F7FA6'], accent: '#8EC5E8', head: ['#EAF7FF', '#6FA9CF'], ribbon: ['#A9D4F0', '#6BA6CC', '#3A6E92'], ribbonInk: '#08202F', nameGrad: ['#DDF1FF', '#78B2D8'], wreath: '#A9D2EC' },
-  champion: { name: 'Chempion', ribbonText: 'CHEMPION', deco: 'champion', frame: ['#FFE08A', '#F2A91B', '#B4540E'], accent: '#F5B83A', head: ['#FFE08A', '#D58A12'], ribbon: ['#E0443F', '#B01C26', '#6E0E16'], ribbonInk: '#FFD978', nameGrad: ['#FFE08A', '#D58A12'], wreath: '#F2B33A', crown: true, corner: '#A3151F' },
+  champion: { name: 'Chempion', ribbonText: '1-HAFTA CHEMPIONI', deco: 'champion', frame: ['#FFE08A', '#F2A91B', '#B4540E'], accent: '#F5B83A', head: ['#FFE08A', '#D58A12'], ribbon: ['#E0443F', '#B01C26', '#6E0E16'], ribbonInk: '#FFD978', nameGrad: ['#FFE08A', '#D58A12'], wreath: '#F2B33A', crown: true, corner: '#A3151F' },
   active: { name: 'Eng faol', ribbonText: 'ENG FAOL', deco: 'active', frame: ['#7EE0A0', '#2DAA5F', '#166B3A'], accent: '#F5C21B', head: ['#FFE48A', '#D79B0A'], ribbon: ['#3FBF77', '#1F8C50', '#0F5A32'], ribbonInk: '#EAFFF1', nameGrad: ['#FFE48A', '#D9A10E'], wreath: '#4FC783' },
   marathon: { name: 'Marafon', ribbonText: 'MARAFON', deco: 'marathon', frame: ['#7FB6FF', '#2F7BFF', '#1546B8'], accent: '#4C95FF', head: ['#D8E9FF', '#4C8EEA'], ribbon: ['#3C8CFF', '#1F62E0', '#123F9C'], ribbonInk: '#F2F8FF', nameGrad: ['#CFE3FF', '#3F86F0'], wreath: null },
   thanks: { name: 'Minnatdorchilik', ribbonText: 'MINNATDORCHILIK', deco: 'thanks', frame: ['#D6BFFF', '#9B6BF2', '#5B2FB3'], accent: '#B58BFF', head: ['#EBDDFF', '#9A74E6'], ribbon: ['#7B4FD8', '#5A32B0', '#3A1D80'], ribbonInk: '#F4ECFF', nameGrad: ['#EBDDFF', '#A67FF0'], wreath: null },
@@ -252,9 +252,10 @@ function sparkle(ctx: CanvasRenderingContext2D, x: number, y: number, r: number,
   ctx.restore();
 }
 
-function ribbon(ctx: CanvasRenderingContext2D, t: Tpl, cx: number, cy: number): number {
-  ctx.font = `700 46px ${SERIF}`;
-  const textW = Array.from(t.ribbonText).reduce((a, c) => a + ctx.measureText(c).width + 6, -6);
+function ribbon(ctx: CanvasRenderingContext2D, t: Tpl, cx: number, cy: number, customText?: string): number {
+  const txt = (customText || t.ribbonText).toUpperCase();
+  ctx.font = `700 44px ${SERIF}`;
+  const textW = Array.from(txt).reduce((a, c) => a + ctx.measureText(c).width + 6, -6);
   const half = Math.max(210, textW / 2 + 70);
   const h = 70;
   const notch = 34;
@@ -284,7 +285,7 @@ function ribbon(ctx: CanvasRenderingContext2D, t: Tpl, cx: number, cy: number): 
   ctx.beginPath(); ctx.moveTo(x0 + notch + 6, y0 + 7); ctx.lineTo(x1 - notch - 6, y0 + 7); ctx.stroke();
   ctx.fillStyle = t.ribbonInk;
   ctx.textBaseline = 'middle';
-  spaced(ctx, t.ribbonText, cx, cy + 2, 6);
+  spaced(ctx, txt, cx, cy + 2, 6);
   ctx.textBaseline = 'alphabetic';
   return half;
 }
@@ -403,7 +404,8 @@ export async function drawCertificate(canvas: HTMLCanvasElement, c: Certificate)
 
   // lenta (tur nomi), gul, toj
   const ry = story ? 560 : 428;
-  const half = ribbon(ctx, t, W / 2, ry);
+  const badgeText = (c.badgeText || (c.tpl === 'champion' ? '1-HAFTA CHEMPIONI' : t.ribbonText)).toUpperCase();
+  const half = ribbon(ctx, t, W / 2, ry, badgeText);
   const sx = half + (story ? 62 : 90);
   if (W / 2 + sx + 36 < W - 100) {
     [-1, 1].forEach(sd => {

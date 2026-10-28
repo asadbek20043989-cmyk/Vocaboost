@@ -70,6 +70,13 @@ export interface LeaderboardUser {
   streak: number;
   level: EnglishLevel;
   isCurrentUser?: boolean;
+  coins?: number;
+  refCount?: number;
+  crown?: boolean;
+  glowingNick?: boolean;
+  vipCheck?: boolean;
+  titleBadge?: string;
+  frame?: string;
 }
 
 export interface AchievementBadge {
@@ -106,6 +113,7 @@ export interface UserProfile {
   wordsPerDay: number; // kuniga nechta yangi so'z (5 / 10 / 15 / 20)
   dailyGoalMinutes: DailyGoalMinutes;
   xp: number;
+  coins: number; // tangalar balansi (do'konda ishlatiladi)
   streak: number;
   lastReadDate?: string;
   reminderTime: string;
@@ -129,6 +137,64 @@ export interface UserProfile {
   adjApplied?: number; // admin tuzatishlarining shu hisobga qo'llangan umumiy yig'indisi
   updatedAt?: number; // sozlamalar (ism, daraja, ...) oxirgi o'zgargan vaqt — qurilmalar o'rtasida birlashtirish uchun
   customPacks?: CustomWordPack[]; // Foydalanuvchining shaxsiy lug'at to'plamlari
+  // --- Do'stlarni taklif qilish (Referral) va Do'kon tizimi ---
+  refCount?: number; // taklif qilingan do'stlar soni
+  refXpEarned?: number; // referallar orqali ishlangan jami XP
+  refCoinsEarned?: number; // referallar orqali ishlangan jami tangalar
+  inventory?: string[]; // sotib olingan mahsulotlar identifikatorlari
+  activeFrame?: string; // joriy tanlangan avatar ramkasi (gold | fire | crystal | neon)
+  activeTitle?: string; // joriy profil unvoni ("So'z ustasi", "Kitobxon", h.k.)
+  activeTheme?: string; // joriy tanlangan tema ('dark' | 'indigo' | 'neon' | 'emerald')
+  hasCrown?: boolean; // avatar ustida toj
+  hasGlowingNick?: boolean; // reytingda yaltiroq/gradient ism
+  hasVipCheck?: boolean; // ko'k tasdiqlangan belgi (galochka)
+  doubleXpUntil?: number; // 2x XP tugash vaqti (ms)
+}
+
+export type ShopCategory = 'all' | 'boosters' | 'cosmetics' | 'titles_themes' | 'learning' | 'special';
+export type ShopItemType = 'consumable' | 'permanent' | 'duration';
+
+export interface ShopItem {
+  id: string;
+  title: string;
+  description: string;
+  category: ShopCategory;
+  priceCoins: number;
+  priceXp?: number;
+  discountPct?: number; // 0 - 90
+  itemType: ShopItemType;
+  durationHours?: number;
+  stockLimit?: number | null;
+  isActive: boolean;
+  image?: string;
+  icon?: string;
+  badge?: string;
+}
+
+export interface TopBook {
+  id: string;
+  title: string;
+  author: string;
+  level: string;
+  desc: string;
+  coverImage: string;
+  downloadUrl?: string;
+  readUrl?: string;
+  content?: string;
+}
+
+export interface LofiTrack {
+  id: string;
+  title: string;
+  artist: string;
+  src: string;
+  duration?: string;
+}
+
+export interface ReferralConfig {
+  rewardXp: number;
+  rewardCoins: number;
+  inviteText: string;
 }
 
 export interface WheelState {

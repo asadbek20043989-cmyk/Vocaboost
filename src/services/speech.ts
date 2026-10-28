@@ -9,7 +9,8 @@
 // Shadowing uchun: Web Speech API SpeechRecognition (bepul).
 
 const TTS_URL: string = ((import.meta as any).env?.VITE_TTS_URL as string) || '/.netlify/functions/tts';
-const SERVER_TTS = String((import.meta as any).env?.VITE_SERVER_TTS ?? '0') === '1';
+// Sun'iy / serverless ovoz umuman ishlatilmaydi — faqat haqiqiy inson yozuvlari va brauzer tabiiy nutqi
+const SERVER_TTS = false;
 const TTS_VER = '2'; // eski (robot ovozli) keshlangan fayllarni almashtirish uchun
 const SERVER_TIMEOUT_MS = 7000; // yangi so'zning birinchi marta yaratilishi bir necha soniya olishi mumkin
 const HUMAN_TIMEOUT_MS = 4000;
