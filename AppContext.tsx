@@ -22,31 +22,35 @@ import { mergeGames, GameDef } from '../data/games';
 import { newEntry, applyResult, MASTER_DAYS } from '../services/srs';
 import { subscribe, patch, put, realtimeEnabled, getJson, removePath } from '../services/realtime';
 import { nowMs, todayKey, dayDiff, syncClock } from '../services/time';
-import { claimCertificate, claimWelcomeCertificate } from '../services/certApi';
+import { claimCertificate, claimWelcomeCertificate, claimAward } from '../services/certApi';
 import { ACCOUNT_ID, lsGet, lsSet, lsDel } from '../services/account';
 
 // ---- Netlify kreditini tejash sozlamalari ----
 // Har bir bazaga yozish Netlify funksiyasi (db.mjs) chaqiruvi hisoblanadi, shuning uchun yozuvlar jamlanadi.
 const SYNC_DEBOUNCE_MS = 20000; // holat sinxronlash: oxirgi o'zgarishdan 20 soniya keyin (avval 1.5 soniya)
 const LB_THROTTLE_MS = 45000; // reytingga yozish: ko'pi bilan 45 soniyada bir marta (avval har o'zgarishda)
-const GRANTS_EVERY_MS = 60 * 60 * 1000; // admin sovg'alarini tekshirish: soatiga bir marta (avval 5 daqiqada)
 import {
   CoreState, CloudCore, mergeCore, mergeSrs, normalizeCore, coreSig, srsSig,
   parseRemoteCore, parseRemoteSrs,
 } from '../services/sync';
+import { DEFAULT_SHOP_ITEMS, DEFAULT_TOP_BOOKS, DEFAULT_LOFI_TRACKS, DEFAULT_REFERRAL_CONFIG } from '../data/shop';
+import { ShopItem, TopBook, LofiTrack, ReferralConfig } from '../types';
+import { botProcessReferral } from '../services/bot';
 
-type TabId = 'home' | 'words' | 'games' | 'leaderboard';
+export type TabId = 'home' | 'words' | 'shop' | 'games' | 'leaderboard';
 /** Streak oynasi: gain — bugungi streak yig'ildi; frozen — bir kun o'tkazib yuborilgan, streak muzlab turibdi */
 export type StreakPopupData =
   | { kind: 'gain'; streak: number; saved: boolean }
   | { kind: 'frozen'; streak: number; savers: number };
-export type Overlay = null | { type: 'learn'; packId?: string } | { type: 'game'; id: string };
+export type Overlay = null | { type: 'learn'; packId?: string } | { type: 'game'; id: string } | { type: 'survival'; id: string };
 
 export interface Settings {
   reviewCap: number;
   xpNewWord: number;
   xpCorrect: number;
   xpDailyBonus: number;
+  coinsPerWord: number;
+  coinsPerGame: number;
 }
 /** Daraja bo'yicha so'zlar ustuvorligi: o'z darajasi birinchi, tugasa — eng yaqin darajalar */
 const LEVEL_PREF: Record<EnglishLevel, EnglishLevel[]> = {
@@ -57,7 +61,7 @@ const LEVEL_PREF: Record<EnglishLevel, EnglishLevel[]> = {
 };
 /** Daraja bo'yicha so'z kam bo'lsa ham o'yin/mashqlar to'xtab qolmasligi uchun eng kam ko'rinadigan so'zlar soni */
 const MIN_LEVEL_WORDS = 40;
-const DEFAULT_SETTINGS: Settings = { reviewCap: 30, xpNewWord: 3, xpCorrect: 2, xpDailyBonus: 10 };
+const DEFAULT_SETTINGS: Settings = { reviewCap: 30, xpNewWord: 3, xpCorrect: 2, xpDailyBonus: 10, coinsPerWord: 2, coinsPerGame: 5 };
 
 export const MILESTONES: { n: number; tpl: string; title: string }[] = [
   { n: 100, tpl: 'bronze', title: "100 ta so'z yodlandi" },
@@ -110,6 +114,9 @@ interface AppContextType {
   // chellenj / marafonlar (admin o'tkazadi)
   challenges: Challenge[];
   joinChallenge: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  openSurvival: (id: string) => Promise<{ ok: boolean; error?: string }>; // Marafon: urinishni boshlaydi (faqat 1 marta)
+  saveSurvival: (id: string, score: number, done: boolean, keepalive?: boolean) => void;
+  allWords: BankWord[]; // barcha darajadagi so'zlar (Marafon uchun adolatli umumiy to'plam)
   introduceWord: (w: BankWord, correct: boolean) => number;
   reviewWord: (w: BankWord, correct: boolean) => number;
   // Learning.tsx bilan moslik
@@ -138,6 +145,8 @@ interface AppContextType {
   challengesLive: boolean;
   realtimeOn: boolean;
   announcement: { text: string; active: boolean } | null;
+  /** Joriy liga haftasi (admin «Yangi hafta» bosganda oshadi) */
+  leagueWeek: { week: number; startedAt: number } | null;
   // sertifikatlar
   certificates: Certificate[];
   certificateView: Certificate | null;
@@ -146,6 +155,15 @@ interface AppContextType {
   streakPopup: StreakPopupData | null;
   dismissStreakPopup: () => void;
   addXp: (amount: number) => number;
+  addCoins: (amount: number) => void;
+  // Do'kon va Tangalar
+  shopItems: ShopItem[];
+  books: TopBook[];
+  lofiTracks: LofiTrack[];
+  referralConfig: ReferralConfig;
+  buyShopItem: (item: ShopItem, tgUsername?: string) => { ok: boolean; message: string; prize?: any };
+  isDoubleXpActive: boolean;
+  doubleXpTimeLeft: string;
   aiLeft: number;
   consumeAi: () => boolean;
   blitzLeft: number;
@@ -182,6 +200,18 @@ const INITIAL_PROFILE: UserProfile = {
   wordsPerDay: 10,
   dailyGoalMinutes: 10,
   xp: 0,
+  coins: 50, // boshlang'ich start: do'kondan darhol xarid qilish uchun 50 tanga
+  refCount: 0,
+  refXpEarned: 0,
+  refCoinsEarned: 0,
+  inventory: [],
+  activeFrame: '',
+  activeTitle: '',
+  activeTheme: 'dark',
+  hasCrown: false,
+  hasGlowingNick: false,
+  hasVipCheck: false,
+  doubleXpUntil: 0,
   streak: 0,
   reminderTime: '20:00',
   hasCompletedOnboarding: false,
@@ -527,6 +557,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       xpNewWord: n(s.xpNewWord, DEFAULT_SETTINGS.xpNewWord),
       xpCorrect: n(s.xpCorrect, DEFAULT_SETTINGS.xpCorrect),
       xpDailyBonus: n(s.xpDailyBonus, DEFAULT_SETTINGS.xpDailyBonus),
+      coinsPerWord: n(s.coinsPerWord, DEFAULT_SETTINGS.coinsPerWord),
+      coinsPerGame: n(s.coinsPerGame, DEFAULT_SETTINGS.coinsPerGame),
     };
   }, [config]);
 
@@ -552,10 +584,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         streak: isMe ? profile.streak : Number(e.streak) || 0,
         level: (isMe ? profile.level : e.level || 'A1') as EnglishLevel,
         isCurrentUser: isMe,
+        coins: isMe ? (profile.coins ?? 50) : Number(e.coins) || 0,
+        refCount: isMe ? (profile.refCount ?? 0) : Number(e.refCount) || 0,
+        crown: isMe ? !!profile.hasCrown : !!e.crown,
+        glowingNick: isMe ? !!profile.hasGlowingNick : !!e.glowingNick,
+        vipCheck: isMe ? !!profile.hasVipCheck : !!e.vipCheck,
+        titleBadge: isMe ? (profile.activeTitle || '') : (e.titleBadge || ''),
+        frame: isMe ? (profile.activeFrame || '') : (e.frame || ''),
       });
     });
     if (!meSeen && !meHidden) {
-      list.push({ id: myId.current, name: `${profile.name} (Siz)`, avatar: profile.avatar, xp: profile.xp, streak: profile.streak, level: profile.level, isCurrentUser: true });
+      list.push({
+        id: myId.current,
+        name: `${profile.name} (Siz)`,
+        avatar: profile.avatar,
+        xp: profile.xp,
+        streak: profile.streak,
+        level: profile.level,
+        isCurrentUser: true,
+        coins: profile.coins ?? 50,
+        refCount: profile.refCount ?? 0,
+        crown: !!profile.hasCrown,
+        glowingNick: !!profile.hasGlowingNick,
+        vipCheck: !!profile.hasVipCheck,
+        titleBadge: profile.activeTitle || '',
+        frame: profile.activeFrame || '',
+      });
     }
     list.sort((a, b) => b.xp - a.xp);
     return list;
@@ -565,6 +619,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     config?.announcement && config.announcement.active && config.announcement.text
       ? { text: String(config.announcement.text), active: true }
       : null;
+
+  const leagueWeek = config?.league && Number(config.league.week) > 0 ? { week: Number(config.league.week), startedAt: Number(config.league.startedAt) || 0 } : null;
 
 // ---------- qurilmalar o'rtasida sinxronlash (telefon <-> noutbuk) ----------
   // Butun progress bulutda `state/<hisob>` ostida saqlanadi. Qurilmalar bir-birining ma'lumotini ustiga yozmaydi:
@@ -900,12 +956,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setWheel(p => ({ ...p, proUntil: Math.max(nowMs(), p.proUntil) + amount * 3600000 }));
           pushNotice(`👑 Admin sizga ${amount} soatlik VIP sovg'a qildi`);
         } else if (g.type === 'xp' && amount > 0) {
-          setProfile(p => ({ ...p, xp: p.xp + amount }));
-          pushNotice(`💎 Admin sizga +${amount} XP sovg'a qildi`);
-        } else if (g.type === 'xpset') {
-          setProfile(p => ({ ...p, xp: amount, xpSets: Array.from(new Set([...(p.xpSets || []), g.id])), updatedAt: nowMs() }));
-          pushNotice(`💎 XP balansingiz ${amount} ga o'rnatildi`);
+          setProfile(p => ({ ...p, xp: p.xp + amount, ...(Number((g as any).coins) > 0 ? { coins: (p.coins ?? 50) + Number((g as any).coins) } : {}) }));
+          pushNotice(`💎 Admin sizga +${amount} XP${Number((g as any).coins) > 0 ? ` va +${(g as any).coins} tanga` : ''} sovg'a qildi`);
+        } else if (g.type === 'coins' && amount > 0) {
+          setProfile(p => ({ ...p, coins: (p.coins ?? 50) + amount }));
+          pushNotice(`🪙 Admin sizga +${amount} ta tanga sovg'a qildi`);
         }
+        // Eski «xpset» sovg'alari endi qo'llanmaydi: admin XP o'zgartirishi Liga yozuvidagi `adj` orqali (farq sifatida) ishlaydi.
       });
       if (list.length) setGrantsDone(prev => Array.from(new Set([...prev, ...list.map(g => g.id)])));
       setGrantsReady(true);
@@ -915,22 +972,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       grantsBusy.current = false;
     }
   };
+  // Netlify kreditini tejash: sovg'ani tekshirish funksiyasi FAQAT admin sovg'a yuborganida (reytingdagi `hasGrant` bayrog'i)
+  // chaqiriladi. Soatiga bir marta so'rov yuborish bekor qilindi. Yangilanishdan keyingi birinchi kirishda bitta tekshiruv bor
+  // (eski, bayroqsiz sovg'alar yo'qolmasligi uchun).
+  const grantsBoot = useRef(false);
   useEffect(() => {
     if (!realtimeEnabled || !syncReady || !profile.hasCompletedOnboarding) return;
-    let lastClaim = Date.now();
-    const run = () => {
-      lastClaim = Date.now();
+    if (leagueRaw === null && !grantsBoot.current) {
+      const t = setTimeout(() => setGrantsReady(true), 6000); // reyting kelmasa ham ilova to'xtab qolmaydi
+      return () => clearTimeout(t);
+    }
+    const flagged = leagueRaw?.[myId.current]?.hasGrant === true;
+    const firstEver = !lsGet('lx_grants_boot_v2');
+    if (flagged || (firstEver && !grantsBoot.current)) {
+      grantsBoot.current = true;
+      lsSet('lx_grants_boot_v2', '1');
       claimGrants();
-    };
-    run();
-    const id = setInterval(run, GRANTS_EVERY_MS);
-    const vis = () => document.visibilityState === 'visible' && Date.now() - lastClaim > 30 * 60 * 1000 && run();
-    document.addEventListener('visibilitychange', vis);
-    return () => {
-      clearInterval(id);
-      document.removeEventListener('visibilitychange', vis);
-    };
-  }, [syncReady, profile.hasCompletedOnboarding]);
+    } else {
+      grantsBoot.current = true;
+      setGrantsReady(true);
+    }
+  }, [syncReady, profile.hasCompletedOnboarding, leagueRaw]);
 
   // Eski "XP ofseti" (admin XP ni o'zgartirganda ishlatilgan) ni haqiqiy XP ga aylantiramiz: shundan keyin
   // foydalanuvchi yig'gan XP Ligada darhol ko'rinadi.
@@ -944,15 +1006,240 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     patch(`leaderboard/${myId.current}`, { xp: nx, xpOffset: 0 });
   }, [leagueRaw, syncReady, grantsReady, profile.hasCompletedOnboarding]);
 
+  // Admin XP ni o'zgartirsa (Liga yozuvidagi `adj` / `adjV`), shu FARQ foydalanuvchining o'z XP siga bir marta qo'shiladi.
+  // Shundan keyin foydalanuvchi yig'gan XP admin qo'ygan qiymatning ustiga qo'shiladi (grant/qurilma holatiga bog'liq emas).
+  useEffect(() => {
+    if (!realtimeEnabled || !syncReady || !profile.hasCompletedOnboarding) return;
+    const self = leagueRaw?.[myId.current];
+    if (!self) return;
+    const v = Number(self.adjV) || 0;
+    if (v <= (profile.adjV || 0)) return;
+    const adj = Number(self.adj) || 0;
+    const delta = adj - (profile.adjApplied || 0);
+    setProfile(p => (v <= (p.adjV || 0) ? p : { ...p, xp: Math.max(0, p.xp + delta), adjV: v, adjApplied: adj, updatedAt: nowMs() }));
+  }, [leagueRaw, syncReady, profile.hasCompletedOnboarding, profile.adjV]);
+
+  const isDoubleXpActive = Boolean(profile.doubleXpUntil && profile.doubleXpUntil > now);
+
+  const doubleXpTimeLeft = useMemo(() => {
+    if (!profile.doubleXpUntil || profile.doubleXpUntil <= now) return '';
+    const diffSec = Math.max(0, Math.floor((profile.doubleXpUntil - now) / 1000));
+    const hours = Math.floor(diffSec / 3600);
+    const mins = Math.floor((diffSec % 3600) / 60);
+    const secs = diffSec % 60;
+    if (hours > 0) return `${hours}s ${mins}d`;
+    return `${mins}d ${secs < 10 ? '0' : ''}${secs}s`;
+  }, [profile.doubleXpUntil, now]);
+
   const applyXpMultiplier = (amount: number): number => {
-    if (!wheel.doubleXpPending || amount <= 0) return amount;
+    if (amount <= 0) return amount;
+    if (profile.doubleXpUntil && profile.doubleXpUntil > nowMs()) {
+      return amount * 2;
+    }
+    if (!wheel.doubleXpPending) return amount;
     setWheel(p => ({ ...p, doubleXpPending: false }));
     return amount * 2;
   };
+
   const addXp = (amount: number): number => {
     const gained = applyXpMultiplier(amount);
-    setProfile(p => ({ ...p, xp: p.xp + gained }));
+    setProfile(p => ({
+      ...p,
+      xp: p.xp + gained,
+      updatedAt: nowMs(),
+    }));
     return gained;
+  };
+
+  const addCoins = (amount: number): void => {
+    if (amount <= 0) return;
+    setProfile(p => ({ ...p, coins: (p.coins ?? 50) + amount, updatedAt: nowMs() }));
+  };
+
+  // Do'kon mahsulotlari (Admin paneldan o'zgartiriladigan yoki standart)
+  const shopItems: ShopItem[] = useMemo(() => {
+    const raw = config?.shop;
+    if (!raw || typeof raw !== 'object') return DEFAULT_SHOP_ITEMS;
+    const list: ShopItem[] = [];
+    const keys = new Set<string>();
+    Object.entries(raw).forEach(([id, it]: [string, any]) => {
+      if (it && it.title) {
+        list.push({ ...it, id });
+        keys.add(id);
+      }
+    });
+    DEFAULT_SHOP_ITEMS.forEach(d => {
+      if (!keys.has(d.id)) list.push(d);
+    });
+    return list;
+  }, [config?.shop]);
+
+  const books: TopBook[] = useMemo(() => {
+    const raw = config?.books;
+    if (!raw || typeof raw !== 'object') return DEFAULT_TOP_BOOKS;
+    const list: TopBook[] = [];
+    const keys = new Set<string>();
+    Object.entries(raw).forEach(([id, b]: [string, any]) => {
+      if (b && b.title) {
+        list.push({ ...b, id });
+        keys.add(id);
+      }
+    });
+    DEFAULT_TOP_BOOKS.forEach(d => {
+      if (!keys.has(d.id)) list.push(d);
+    });
+    return list;
+  }, [config?.books]);
+
+  const lofiTracks: LofiTrack[] = useMemo(() => {
+    const raw = config?.lofi;
+    if (!raw || typeof raw !== 'object') return DEFAULT_LOFI_TRACKS;
+    const list: LofiTrack[] = [];
+    const keys = new Set<string>();
+    Object.entries(raw).forEach(([id, tr]: [string, any]) => {
+      if (tr && tr.src) {
+        list.push({ ...tr, id });
+        keys.add(id);
+      }
+    });
+    DEFAULT_LOFI_TRACKS.forEach(d => {
+      if (!keys.has(d.id)) list.push(d);
+    });
+    return list;
+  }, [config?.lofi]);
+
+  const referralConfig: ReferralConfig = useMemo(() => {
+    const raw = config?.referral;
+    if (!raw) return DEFAULT_REFERRAL_CONFIG;
+    return {
+      rewardXp: Number.isFinite(Number(raw.rewardXp)) ? Number(raw.rewardXp) : DEFAULT_REFERRAL_CONFIG.rewardXp,
+      rewardCoins: Number.isFinite(Number(raw.rewardCoins)) ? Number(raw.rewardCoins) : DEFAULT_REFERRAL_CONFIG.rewardCoins,
+      inviteText: raw.inviteText || DEFAULT_REFERRAL_CONFIG.inviteText,
+    };
+  }, [config?.referral]);
+
+  // Mini App start havolasi orqali kirgan do'stni qayd etish
+  useEffect(() => {
+    const sp = getStartParam();
+    if (sp && sp.startsWith('ref_') && isTelegram) {
+      const seenKey = 'vb_ref_claimed_' + sp;
+      if (!lsGet(seenKey)) {
+        botProcessReferral(sp)
+          .then(res => {
+            if (res?.ok) {
+              lsSet(seenKey, '1');
+              pushNotice("🎉 Do'stingiz taklif havolasi orqali qo'shildingiz!");
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [isTelegram]);
+
+  // Do'kondan faqat tangalar bilan xarid qilish — barcha mahsulotlar darhol taqdim etiladi
+  const buyShopItem = (item: ShopItem, tgUsername?: string): { ok: boolean; message: string; prize?: any } => {
+    const price = item.priceCoins;
+    const currentBalance = profile.coins ?? 50;
+
+    if (currentBalance < price) {
+      triggerHaptic('error');
+      return { ok: false, message: `Tangalaringiz yetarli emas! Sizda ${currentBalance} tanga mavjud, mahsulot narxi esa ${price} tanga.` };
+    }
+
+    triggerHaptic('success');
+    sfx.win();
+
+    const updatedCoins = Math.max(0, currentBalance - price);
+    const currentInventory = profile.inventory || [];
+    let updatedInventory = currentInventory.includes(item.id) ? currentInventory : [...currentInventory, item.id];
+    let profileUpdates: Partial<UserProfile> = { coins: updatedCoins, inventory: updatedInventory, updatedAt: nowMs() };
+    let prizeResult: any = null;
+
+    if (item.id === 'xp_boost_1h') {
+      const until = Math.max(nowMs(), profile.doubleXpUntil || 0) + 3600 * 1000;
+      profileUpdates.doubleXpUntil = until;
+      pushNotice('⚡ 2x XP (1 soat) faollashdi!');
+    } else if (item.id === 'xp_boost_24h') {
+      const until = Math.max(nowMs(), profile.doubleXpUntil || 0) + 24 * 3600 * 1000;
+      profileUpdates.doubleXpUntil = until;
+      pushNotice('🚀 2x XP (24 soat) faollashdi!');
+    } else if (item.id === 'streak_saver') {
+      setWheel(w => ({ ...w, streakSavers: w.streakSavers + 1 }));
+      pushNotice('🛡️ Streak himoyasi balansingizga qo‘shildi!');
+    } else if (item.id === 'frame_golden') {
+      profileUpdates.activeFrame = 'golden';
+      pushNotice('🖼️ Oltin profil ramkasi o‘rnatildi!');
+    } else if (item.id === 'frame_fire') {
+      profileUpdates.activeFrame = 'fire';
+      pushNotice('🔥 Olovli profil ramkasi o‘rnatildi!');
+    } else if (item.id === 'frame_crystal') {
+      profileUpdates.activeFrame = 'crystal';
+      pushNotice('💎 Kristall profil ramkasi o‘rnatildi!');
+    } else if (item.id === 'leaderboard_crown') {
+      profileUpdates.hasCrown = true;
+      pushNotice('👑 Profilingiz ustiga toj belgisi o‘rnatildi!');
+    } else if (item.id === 'gradient_nick') {
+      profileUpdates.hasGlowingNick = true;
+      pushNotice('🌈 Reytingda ismingiz yaltiroq gradient rangda porlay boshladi!');
+    } else if (item.id === 'vip_badge') {
+      profileUpdates.hasVipCheck = true;
+      pushNotice('✅ VIP tasdiqlangan (galochka) maqomi berildi!');
+    } else if (item.id.startsWith('theme_')) {
+      const th = item.id.replace('theme_', '');
+      profileUpdates.activeTheme = th;
+      pushNotice(`🎨 "${item.title}" interfeys mavzusi tanlandi!`);
+    } else if (item.id.startsWith('custom_title_')) {
+      const titleName = item.title.replace('Maxsus unvon: ', '').replace(/«|»/g, '');
+      profileUpdates.activeTitle = titleName;
+      pushNotice(`🏅 Profil unvoni: «${titleName}» o‘rnatildi!`);
+    } else if (item.id === 'wheel_spins_3') {
+      setWheel(w => ({ ...w, bonusSpins: w.bonusSpins + 3 }));
+      pushNotice('🎡 Barabanga +3 ta qo‘shimcha aylantirish qo‘shildi!');
+    } else if (item.id === 'mystery_box') {
+      const rnd = Math.random();
+      if (rnd < 0.35) {
+        const bonusXp = 100 + Math.floor(Math.random() * 200);
+        profileUpdates.xp = profile.xp + bonusXp;
+        prizeResult = { type: 'xp', amount: bonusXp, text: `+${bonusXp} XP` };
+        pushNotice(`🎁 Sirli qutidan: +${bonusXp} XP chiqdi!`);
+      } else if (rnd < 0.65) {
+        const bonusCoins = 50 + Math.floor(Math.random() * 100);
+        profileUpdates.coins = updatedCoins + bonusCoins;
+        prizeResult = { type: 'coins', amount: bonusCoins, text: `+${bonusCoins} Tanga` };
+        pushNotice(`🎁 Sirli qutidan: +${bonusCoins} Tanga chiqdi!`);
+      } else if (rnd < 0.85) {
+        setWheel(w => ({ ...w, bonusSpins: w.bonusSpins + 2 }));
+        prizeResult = { type: 'spins', amount: 2, text: '+2 ta Baraban aylantirish' };
+        pushNotice('🎁 Sirli qutidan: +2 ta Baraban aylantirish chiqdi!');
+      } else {
+        const until = Math.max(nowMs(), profile.doubleXpUntil || 0) + 3600 * 1000;
+        profileUpdates.doubleXpUntil = until;
+        prizeResult = { type: 'booster', text: '⚡ 2x XP (1 soat)' };
+        pushNotice('🎁 Sirli qutidan: 2x XP (1 soat) chiqdi!');
+      }
+    } else if (item.id.startsWith('telegram_stars_')) {
+      const starsAmount = item.id === 'telegram_stars_100' ? 100 : 50;
+      const un = (tgUsername || profile.username || '').replace(/^@/, '');
+      put(`inbox/stars_${Date.now()}_${myId.current}`, {
+        type: 'stars_request',
+        userId: myId.current,
+        name: profile.name,
+        username: un,
+        amount: starsAmount,
+        coinsSpent: price,
+        date: new Date().toISOString(),
+      }).catch(() => {});
+      pushNotice(`⭐ ${starsAmount} Telegram Stars so‘rovingiz adminga yuborildi!`);
+    } else if (item.id === 'top_books') {
+      pushNotice('📘 Inglizcha TOP kitoblar to‘plami ochildi!');
+    } else if (item.id === 'lofi_music') {
+      pushNotice('🎧 Lo-Fi musiqa pleyeri ochildi!');
+    } else if (item.id === 'premium_words_pack') {
+      pushNotice('📚 Premium so‘zlar to‘plami ochildi!');
+    }
+
+    setProfile(p => ({ ...p, ...profileUpdates, updatedAt: nowMs() }));
+    return { ok: true, message: `"${item.title}" muvaffaqiyatli xarid qilindi va darhol berildi!`, prize: prizeResult };
   };
 
   // ---------- streak ----------
@@ -1044,8 +1331,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!ok) lbLastSig.current = '';
     });
   };
+  // Reytingga yozishdan oldin Liga yozuvi yuklanishini kutamiz (admin XP tuzatishi eski XP bilan ustidan yozilib ketmasin)
+  const [lbGate, setLbGate] = useState(false);
   useEffect(() => {
-    if (!realtimeEnabled || !profile.hasCompletedOnboarding || !syncReady || !grantsReady) return;
+    if (leagueRaw !== null) setLbGate(true);
+  }, [leagueRaw]);
+  useEffect(() => {
+    const t = setTimeout(() => setLbGate(true), 10000);
+    return () => clearTimeout(t);
+  }, []);
+  useEffect(() => {
+    if (!realtimeEnabled || !profile.hasCompletedOnboarding || !syncReady || !grantsReady || !lbGate) return;
+    // Admin XP tuzatishi hali qo'llanmagan bo'lsa, eski XP ni yubormaymiz (yuqoridagi effekt avval qo'llaydi)
+    const selfLb = leagueRaw?.[myId.current];
+    if (selfLb && (Number(selfLb.adjV) || 0) > (profile.adjV || 0)) return;
     lbPayload.current = {
       name: profile.name,
       avatar: profile.avatar.startsWith('data:') && profile.avatar.length > 1500 ? '' : profile.avatar,
@@ -1060,10 +1359,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       joined: profile.joinedAt || '',
       lr: profile.lastReadDate || '', // oxirgi mashq kuni — bot streak haqida oldindan ogohlantirishi uchun
       sv: wheel.streakSavers || 0, // muzlatish (streak saver) soni
+      coins: profile.coins ?? 50,
+      refCount: profile.refCount ?? 0,
+      crown: !!profile.hasCrown,
+      glowingNick: !!profile.hasGlowingNick,
+      vipCheck: !!profile.hasVipCheck,
+      titleBadge: profile.activeTitle || '',
+      frame: profile.activeFrame || '',
       ts: 0,
     };
     if (!lbTimer.current) lbTimer.current = setTimeout(() => flushLb(), lbLastSig.current ? LB_THROTTLE_MS : 2000);
-  }, [profile.xp, profile.name, profile.avatar, profile.streak, profile.level, profile.wordsPerDay, profile.username, profile.joinedAt, profile.lastReadDate, wheel.streakSavers, profile.hasCompletedOnboarding, savedWords.length, masteredCount, syncReady, grantsReady]);
+  }, [profile.xp, profile.coins, profile.refCount, profile.hasCrown, profile.hasGlowingNick, profile.hasVipCheck, profile.activeTitle, profile.activeFrame, profile.name, profile.avatar, profile.streak, profile.level, profile.wordsPerDay, profile.username, profile.joinedAt, profile.lastReadDate, wheel.streakSavers, profile.hasCompletedOnboarding, savedWords.length, masteredCount, syncReady, grantsReady, lbGate, leagueRaw, profile.adjV]);
   useEffect(() => {
     const onHide = () => document.visibilityState === 'hidden' && flushLb(true);
     const onPageHide = () => flushLb(true);
@@ -1120,6 +1426,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSrs(prev => (prev[b.id] ? prev : { ...prev, [b.id]: { ...newEntry(todayKey(), correct), xpDay: todayKey() } }));
     bumpQuest('learn_words');
     registerActivity();
+    if (correct && (settings.coinsPerWord || 2) > 0) {
+      addCoins(settings.coinsPerWord || 2);
+    }
     return addXp(settings.xpNewWord);
   };
 
@@ -1137,6 +1446,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       triggerHaptic('success');
     }
     registerActivity();
+    if (give && (settings.coinsPerWord || 2) > 0) {
+      addCoins(settings.coinsPerWord || 2);
+    }
     return give ? addXp(settings.xpCorrect) : 0;
   };
 
@@ -1151,7 +1463,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const t = todayKey();
     if (profile.bonusDays.includes(t)) return 0;
     const xp = applyXpMultiplier(settings.xpDailyBonus);
-    setProfile(p => ({ ...p, xp: p.xp + xp, bonusDays: [...p.bonusDays.slice(-30), t] }));
+    setProfile(p => ({ ...p, xp: p.xp + xp, coins: (p.coins ?? 50) + 5, bonusDays: [...p.bonusDays.slice(-30), t] }));
     triggerHaptic('success');
     return xp;
   };
@@ -1167,7 +1479,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
-  // O'yin tugadi: aniqlik >= 60% bo'lsa XP (har bir o'yin uchun kuniga faqat bir marta)
+  // O'yin tugadi: aniqlik >= 60% bo'lsa XP va Tangalar (har bir o'yin uchun kuniga faqat bir marta)
   const completeGame = (id: string, correct: number, total: number, demo = false) => {
     const t = todayKey();
     const g = games.find(x => x.id === id);
@@ -1176,7 +1488,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const already = profile.gameXp[id] === t;
     if (already) return { xp: 0, passed, already: true };
     const xp = applyXpMultiplier(g.xp);
-    setProfile(p => ({ ...p, xp: p.xp + xp, gameXp: { ...p.gameXp, [id]: t } }));
+    const coins = Math.max(1, settings.coinsPerGame || 5);
+    setProfile(p => ({ ...p, xp: p.xp + xp, coins: (p.coins ?? 50) + coins, gameXp: { ...p.gameXp, [id]: t }, updatedAt: nowMs() }));
     setGamesPlayed(n => n + 1);
     bumpQuest('play_game');
     if (correct === total) bumpQuest('perfect_round');
@@ -1191,7 +1504,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     .map(([id, c]: [string, any]) => ({
       id, tpl: String(c.tpl || 'gold'), title: String(c.title || 'Maxsus sertifikat'),
       reason: c.reason ? String(c.reason) : undefined, name: String(c.name || profile.name),
-      date: String(c.date || '').slice(0, 10), special: !c.auto, verified: true,
+      date: String(c.date || '').slice(0, 10), special: !c.auto, verified: true, delivered: !!c.sent,
+      fmt: c.fmt === 'story' ? 'story' : 'wide', stats: c.stats && typeof c.stats === 'object' ? c.stats : undefined,
     }));
   const certificates = [...cloudCerts, ...localCerts].sort((a, b) => (a.date < b.date ? 1 : -1));
 
@@ -1261,7 +1575,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (seen.size > fresh.length || lsGet('lx_certs_init_v1')) {
         pushNotice(first.auto ? '🎓 Tabriklaymiz! Yangi sertifikat oldingiz' : '🎓 Sizga maxsus sertifikat berildi!');
         sfx.win(true);
-        setTimeout(() => setCertificateView({ id: fresh[0], tpl: String(first.tpl || 'gold'), title: String(first.title || ''), reason: first.reason, name: String(first.name || profile.name), date: String(first.date || '').slice(0, 10), special: !first.auto, verified: true }), 600);
+        setTimeout(() => setCertificateView({ id: fresh[0], tpl: String(first.tpl || 'gold'), title: String(first.title || ''), reason: first.reason, name: String(first.name || profile.name), date: String(first.date || '').slice(0, 10), special: !first.auto, verified: true, fmt: first.fmt === 'story' ? 'story' : 'wide', stats: first.stats && typeof first.stats === 'object' ? first.stats : undefined }), 600);
       }
       lsSet('lx_certs_init_v1', '1');
     } else lsSet('lx_certs_init_v1', '1');
@@ -1275,7 +1589,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     if (!canUseBot() || !syncReady || !profile.hasCompletedOnboarding || certSending.current) return;
     const sent = new Set(profile.sentCerts || []);
-    const next = certificates.find(c => !sent.has(c.id) && !certFailed.current.has(c.id));
+    const next = certificates.find(c => !c.delivered && !sent.has(c.id) && !certFailed.current.has(c.id));
     if (!next) return;
     certSending.current = true;
     (async () => {
@@ -1298,7 +1612,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     if (!canUseBot() || !profile.hasCompletedOnboarding) return;
     const remind = profile.botRemind !== false;
-    const sig = `${today}|${remind}|${profile.level}|${profile.wordsPerDay}`;
+    // Netlify kreditini tejash: ro'yxatdan o'tkazish kuniga emas, 3 kunda bir marta (yoki sozlama o'zgarganda)
+    const sig = `${Math.floor(dayDiff('2024-01-01', today) / 3)}|${remind}|${profile.level}|${profile.wordsPerDay}`;
     if (load<string>('lx_reg_v1', '') === sig) return;
     botRegister({ remind, level: profile.level, wordsPerDay: profile.wordsPerDay })
       .then(() => save('lx_reg_v1', sig))
@@ -1425,6 +1740,76 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => clearTimeout(t);
   }, [profile.xp, savedWords.length, masteredCount, profile.name, shortAvatar, duelRaw, syncReady, now]);
 
+  // ---------- Qo'shimcha avtomatik sertifikatlar ----------
+  //   Barqaror (7/14/30 kun streak) · Bilim donosi (daraja tugatildi) · Tezkor (duel g'alabalari) · Mutaxassis (mavzuli to'plam)
+  // Har bir mezon uchun server faqat BIR MARTA sertifikat beradi; bajarilganlari qurilmada eslab qolinadi (ortiqcha so'rov yo'q).
+  const [duelWins, setDuelWins] = useState<number>(() => load<string[]>('lx_duelwins_v1', []).length);
+  const duelsSig = duels.map(d => `${d.code}:${nowMs() >= d.endsAt ? 1 : 0}:${d.players.length}:${d.players[0]?.id}:${d.players[0]?.gain}`).join('|');
+  useEffect(() => {
+    const me = myId.current;
+    const won = new Set<string>(load<string[]>('lx_duelwins_v1', []));
+    let changed = false;
+    duels.forEach(d => {
+      const top = d.players[0];
+      if (nowMs() >= d.endsAt && d.players.length >= 2 && top && top.id === me && top.gain > 0 && !won.has(d.code)) {
+        won.add(d.code);
+        changed = true;
+      }
+    });
+    if (changed) {
+      save('lx_duelwins_v1', Array.from(won));
+      setDuelWins(won.size);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [duelsSig]);
+
+  const awardBusy = useRef(false);
+  const awardFail = useRef<Record<string, number>>({});
+  const [awardTick, setAwardTick] = useState(0);
+  const awardCandidates = useMemo(() => {
+    type Cand = { kind: 'streak' | 'level' | 'duel' | 'pack'; key: string; n?: number; level?: string; title?: string };
+    const list: Cand[] = [];
+    [7, 14, 30].forEach(n => profile.streak >= n && list.push({ kind: 'streak', key: String(n), n }));
+    [10, 25, 50].forEach(n => duelWins >= n && list.push({ kind: 'duel', key: String(n), n }));
+    (['A1', 'A2', 'B1', 'B2+'] as const).forEach(L => {
+      const ws = mainBank.filter(w => w.level === L);
+      if (ws.length >= 20 && ws.every(w => srs[w.id]?.mastered)) list.push({ kind: 'level', key: L.replace('+', 'p'), level: L });
+    });
+    packs.forEach(p => {
+      if (p.kind === 'open' && p.words.length >= 5 && p.words.every(w => srs[w.id]?.mastered)) list.push({ kind: 'pack', key: p.id.slice(0, 30), title: p.title });
+    });
+    return list;
+  }, [profile.streak, duelWins, mainBank, packs, srs]);
+  useEffect(() => {
+    if (!realtimeEnabled || !syncReady || !profile.hasCompletedOnboarding || awardBusy.current || !awardCandidates.length) return;
+    const done = new Set<string>(load<string[]>('lx_awards_v1', []));
+    const nowT = Date.now();
+    const next = awardCandidates.find(c => !done.has(`${c.kind}_${c.key}`) && nowT - (awardFail.current[`${c.kind}_${c.key}`] || 0) > 120000);
+    if (!next) return;
+    awardBusy.current = true;
+    const k = `${next.kind}_${next.key}`;
+    const t = setTimeout(async () => {
+      try {
+        lsSet('lx_certs_init_v1', '1');
+        const r = await claimAward(myId.current, next.kind, next.key, { n: next.n, level: next.level, title: next.title, name: latest.current.profile.name });
+        if (r.id || r.revoked) {
+          done.add(k);
+          save('lx_awards_v1', Array.from(done));
+        } else awardFail.current[k] = Date.now();
+      } catch {
+        awardFail.current[k] = Date.now();
+      } finally {
+        awardBusy.current = false;
+        setAwardTick(n => n + 1);
+        if (awardFail.current[k]) setTimeout(() => setAwardTick(n => n + 1), 125000);
+      }
+    }, 4000);
+    return () => {
+      clearTimeout(t);
+      awardBusy.current = false;
+    };
+  }, [awardCandidates, syncReady, profile.hasCompletedOnboarding, awardTick]);
+
   const newDuelCode = () => Array.from({ length: 6 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join('');
   const myPlayer = (): Record<string, unknown> => ({
     name: profile.name,
@@ -1486,27 +1871,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return subscribe('challenges', v => setChallengesRaw(v || {}), setChallengesLive);
   }, []);
 
+  // Mavzuli chellenj: to'plamdagi so'zlar bo'yicha ball (o'rganilgan so'z — 1 ball, yodlangan so'z — yana +1 ball)
+  const packScore = (packId: string): number => {
+    const p = packs.find(x => x.id === packId);
+    if (!p) return 0;
+    return p.words.reduce((n, w) => n + (srs[w.id] || learnedEn.has(w.en.toLowerCase()) ? 1 : 0) + (srs[w.id]?.mastered ? 1 : 0), 0);
+  };
+
   const challenges: Challenge[] = Object.entries(challengesRaw)
     .filter(([, c]: [string, any]) => c?.meta && c.meta.published !== false)
     .map(([id, c]: [string, any]) => {
       const m = c.meta;
+      const kind = (['themed', 'survival'].includes(m.kind) ? m.kind : 'metric') as Challenge['kind'];
       const metric = (['xp', 'words', 'mastered'].includes(m.metric) ? m.metric : 'xp') as DuelMetric;
       const endsAt = Number(m.endsAt) || 0;
       const ended = nowMs() >= endsAt;
+      const pack = kind === 'themed' ? packs.find(x => x.id === m.packId) : undefined;
       const players: DuelPlayer[] = Object.entries(c.players || {})
         .filter(([, p]) => p)
         .map(([uid, p]: [string, any]) => {
-          const base = { xp: Number(p.base?.xp) || 0, words: Number(p.base?.words) || 0, mastered: Number(p.base?.mastered) || 0 };
+          const base = { xp: Number(p.base?.xp) || 0, words: Number(p.base?.words) || 0, mastered: Number(p.base?.mastered) || 0, pack: Number(p.base?.pack) || 0 };
           const stored = Math.max(0, Number(p.gain) || 0);
-          const lv = ended ? null : liveValue(uid, metric);
+          let lv: number | null = null;
+          if (!ended) {
+            if (kind === 'metric') {
+              const v = liveValue(uid, metric);
+              lv = v === null ? null : Math.max(0, v - base[metric]);
+            } else if (kind === 'themed' && uid === myId.current) lv = Math.max(0, packScore(m.packId) - base.pack);
+          }
           return {
             id: uid,
             name: uid === myId.current ? profile.name : String(p.name || leagueRaw?.[uid]?.name || "O'quvchi"),
             avatar: uid === myId.current ? shortAvatar || String(p.avatar || '') : String(p.avatar || leagueRaw?.[uid]?.avatar || ''),
-            gain: Math.max(stored, lv === null ? 0 : Math.max(0, lv - base[metric])),
+            gain: Math.max(stored, lv === null ? 0 : lv),
             joinedAt: Number(p.joinedAt) || 0,
             ts: Number(p.ts) || 0,
             base,
+            started: Number(p.started) || 0,
+            done: !!p.done,
           };
         })
         .sort((a, b) => b.gain - a.gain || a.ts - b.ts);
@@ -1515,6 +1917,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id,
         title: String(m.title || 'Chellenj'),
         desc: String(m.desc || ''),
+        kind,
+        packId: String(m.packId || ''),
+        packTitle: pack?.title || '',
+        packTotal: pack?.words.length || 0,
+        lives: Math.max(1, Number(m.lives) || 3),
+        secs: Math.max(5, Number(m.secs) || 30),
+        myStarted: !!me?.started,
+        myDone: !!me?.done,
         metric,
         startsAt: Number(m.startsAt) || 0,
         endsAt,
@@ -1528,7 +1938,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     })
     .sort((a, b) => b.startsAt - a.startsAt);
 
-  // Qatnashayotgan chellenjlarda o'z natijamni bazaga yozaman (faqat o'sib boradi)
+  // Qatnashayotgan chellenjlarda o'z natijamni bazaga yozaman (faqat o'sib boradi). Marafon natijasi o'yinning o'zida yoziladi.
   useEffect(() => {
     if (!realtimeEnabled || !syncReady || !profile.hasCompletedOnboarding) return;
     const t = setTimeout(() => {
@@ -1537,16 +1947,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const m = c?.meta;
         const mine = c?.players?.[me];
         const t0 = nowMs();
-        if (!m || !mine || m.finalized || t0 < Number(m.startsAt) || t0 >= Number(m.endsAt)) return;
-        const metric = (['xp', 'words', 'mastered'].includes(m.metric) ? m.metric : 'xp') as DuelMetric;
-        const gain = Math.max(0, duelMetricValue(metric) - (Number(mine.base?.[metric]) || 0));
+        if (!m || !mine || m.finalized || m.kind === 'survival' || t0 < Number(m.startsAt) || t0 >= Number(m.endsAt)) return;
+        let gain: number;
+        if (m.kind === 'themed') gain = Math.max(0, packScore(String(m.packId || '')) - (Number(mine.base?.pack) || 0));
+        else {
+          const metric = (['xp', 'words', 'mastered'].includes(m.metric) ? m.metric : 'xp') as DuelMetric;
+          gain = Math.max(0, duelMetricValue(metric) - (Number(mine.base?.[metric]) || 0));
+        }
         if (gain > (Number(mine.gain) || 0) || mine.name !== profile.name) {
           patch(`challenges/${id}/players/${me}`, { gain: Math.max(gain, Number(mine.gain) || 0), ts: nowMs(), name: profile.name, avatar: shortAvatar });
         }
       });
     }, 8000);
     return () => clearTimeout(t);
-  }, [profile.xp, savedWords.length, masteredCount, profile.name, shortAvatar, challengesRaw, syncReady, now]);
+  }, [profile.xp, savedWords.length, masteredCount, profile.name, shortAvatar, challengesRaw, syncReady, now, srs, packs]);
 
   const joinChallenge = async (id: string): Promise<{ ok: boolean; error?: string }> => {
     const c = challengesRaw[id];
@@ -1554,6 +1968,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (c.meta.finalized || nowMs() >= Number(c.meta.endsAt)) return { ok: false, error: 'Chellenj tugagan' };
     if (c.players?.[myId.current]) return { ok: true };
     const me = myPlayer();
+    if (c.meta.kind === 'themed') (me.base as any).pack = packScore(String(c.meta.packId || ''));
     // So'rov vaqt chegarasiga ega (qotib qolmaydi); ulanish yo'q bo'lsa 2 marta qayta uriniladi
     let ok = await put(`challenges/${id}/players/${myId.current}`, me);
     if (!ok) ok = await put(`challenges/${id}/players/${myId.current}`, me);
@@ -1571,6 +1986,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
       .catch(() => {});
     return { ok: true };
+  };
+
+  // Marafon (3 jon): har bir foydalanuvchiga FAQAT 1 ta urinish. Boshlashdan oldin bazadagi eng yangi holat tekshiriladi.
+  const openSurvival = async (id: string): Promise<{ ok: boolean; error?: string }> => {
+    const c = challengesRaw[id];
+    if (!c?.meta || c.meta.kind !== 'survival') return { ok: false, error: 'Marafon topilmadi' };
+    const t0 = nowMs();
+    if (c.meta.finalized || t0 >= Number(c.meta.endsAt)) return { ok: false, error: 'Marafon tugagan' };
+    if (t0 < Number(c.meta.startsAt)) return { ok: false, error: 'Marafon hali boshlanmagan' };
+    const fresh = await getJson(`challenges/${id}/players/${myId.current}`).catch(() => null);
+    if (fresh && fresh.started) return { ok: false, error: 'Siz bu marafonda allaqachon urindingiz. Har kimga faqat 1 ta imkoniyat beriladi.' };
+    const base = { name: profile.name, avatar: shortAvatar, gain: 0, started: nowMs(), done: false, ts: nowMs() };
+    const ok = await patch(`challenges/${id}/players/${myId.current}`, fresh ? base : { ...base, joinedAt: nowMs(), base: { xp: profile.xp, words: savedWords.length, mastered: masteredCount } });
+    if (!ok) return { ok: false, error: 'Boshlab bo‘lmadi. Internetni tekshirib, qayta urinib ko‘ring' };
+    setChallengesRaw(prev => ({ ...prev, [id]: { ...(prev[id] || {}), players: { ...((prev[id] || {}).players || {}), [myId.current]: { ...(((prev[id] || {}).players || {})[myId.current] || {}), ...base } } } }));
+    try { sessionStorage.setItem('vb_liga_sub', 'challenge'); } catch { /* ignore */ }
+    setOverlay({ type: 'survival', id });
+    return { ok: true };
+  };
+  const saveSurvival = (id: string, score: number, done: boolean, keepalive = false) => {
+    const data = { gain: Math.max(0, Math.round(score)), done, ts: nowMs() };
+    patch(`challenges/${id}/players/${myId.current}`, data, keepalive);
+    setChallengesRaw(prev => ({ ...prev, [id]: { ...(prev[id] || {}), players: { ...((prev[id] || {}).players || {}), [myId.current]: { ...(((prev[id] || {}).players || {})[myId.current] || {}), ...data } } } }));
   };
 
   // Taklif havolasi: Telegram `startapp=duel_KOD` yoki `?duel=KOD`
@@ -1630,7 +2068,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     triggerHaptic('success');
     sfx.win(false);
     addXp(quest.xpReward);
-    setQuestState(prev => ({ ...prev, quests: prev.quests.map(q => (q.id === questId ? { ...q, claimed: true } : q)) }));
+    const questCoins = Math.max(3, Math.floor(quest.xpReward / 2));
+    const nextQuests = questState.quests.map(q => (q.id === questId ? { ...q, claimed: true } : q));
+    const allDone = nextQuests.length > 0 && nextQuests.every(q => q.claimed);
+    const extraCoins = allDone ? 15 : 0;
+    if (extraCoins > 0) {
+      pushNotice('🌟 Barcha kunlik topshiriqlar bajarildi! +15 Tanga bonus berildi!');
+    }
+    addCoins(questCoins + extraCoins);
+    setQuestState(prev => ({ ...prev, quests: nextQuests }));
   };
 
   const resetProgress = () => {
@@ -1641,7 +2087,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Yangi "davr" (epoch): boshqa qurilmalar eski ma'lumotni qaytarib yubora olmaydi, ular ham tozalanadi
     oldSrsKey.current = srsKey(epoch);
     setEpoch(Math.max(nowMs(), epoch + 1));
-    setProfile({ ...freshProfile(), updatedAt: nowMs() });
+    const selfLb = leagueRaw?.[myId.current];
+    setProfile({ ...freshProfile(), adjV: Number(selfLb?.adjV) || 0, adjApplied: Number(selfLb?.adj) || 0, updatedAt: nowMs() });
     // Liga ham darhol nolga tushadi (ro'yxatdan o'tish tugamaguncha eski natija ko'rinib turmasin)
     patch(`leaderboard/${myId.current}`, { xp: 0, xpOffset: 0, streak: 0, learned: 0, mastered: 0, ts: nowMs() });
     setSrs({});
@@ -1664,11 +2111,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       value={{
         profile, bank, bankFromCloud, srs, savedWords, masteredCount, dueWords, newQueue, introducedToday,
         dailyQuests, badges, games, settings, activeTab, setActiveTab, overlay, openLearn, openGame, closeOverlay,
-        goBack, canGoBack, packs, todayPacks, packProgress, customPacks, saveCustomPack, deleteCustomPack, duels, createDuel, joinDuel, leaveDuel, pendingDuelCode, clearPendingDuel: () => setPendingDuelCode(''), duelMetricValue, challenges, joinChallenge, introduceWord, reviewWord, addWord, isWordSaved, markWordReviewed, claimDailyBonus, completeGame, updateProfile, finishOnboarding,
+        goBack, canGoBack, packs, todayPacks, packProgress, customPacks, saveCustomPack, deleteCustomPack, duels, createDuel, joinDuel, leaveDuel, pendingDuelCode, clearPendingDuel: () => setPendingDuelCode(''), duelMetricValue, challenges, joinChallenge, openSurvival, saveSurvival, allWords: mainBank, introduceWord, reviewWord, addWord, isWordSaved, markWordReviewed, claimDailyBonus, completeGame, updateProfile, finishOnboarding,
         resetProgress, claimQuest, wheel: w, wheelPrizes: wheelCfg.prizes, wheelFreeSpins: wheelCfg.freeSpins,
         freeSpinsLeft, totalSpinsLeft, isPro, spinWheel, applyPrize, grantReferralSpin, leagueUsers, leagueLive, challengesLive,
-        realtimeOn: realtimeEnabled, announcement, certificates, certificateView, showCertificate: setCertificateView,
-        notice, streakPopup, dismissStreakPopup, addXp, aiLeft, consumeAi, blitzLeft, consumeBlitz, markWritingDone, today, syncReady, accountId: myId.current, isTelegram, linkAccount,
+        realtimeOn: realtimeEnabled, announcement, leagueWeek, certificates, certificateView, showCertificate: setCertificateView,
+        notice, streakPopup, dismissStreakPopup, addXp, addCoins, shopItems, books, lofiTracks, referralConfig, buyShopItem, isDoubleXpActive, doubleXpTimeLeft, aiLeft, consumeAi, blitzLeft, consumeBlitz, markWritingDone, today, syncReady, accountId: myId.current, isTelegram, linkAccount,
       }}
     >
       {children}

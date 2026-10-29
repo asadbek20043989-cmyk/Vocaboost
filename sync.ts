@@ -66,7 +66,19 @@ export function mergeProfile(a: UserProfile, b: UserProfile): UserProfile {
   // XP: odatda kattasi. Lekin admin XP ni o'zgartirgan (xpSets) bo'lsa — o'sha o'zgartirishni ko'proq qo'llagan tomon yutadi
   const sa = arr(a.xpSets).length;
   const sb = arr(b.xpSets).length;
-  out.xp = sa !== sb ? (sa > sb ? a.xp : b.xp) || 0 : Math.max(a.xp || 0, b.xp || 0);
+  const va = a.adjV || 0;
+  const vb = b.adjV || 0;
+  if (va !== vb) {
+    // Admin XP tuzatishini ko'proq qo'llagan tomon yutadi (shunda tuzatish boshqa qurilma tomonidan bekor qilinmaydi)
+    const w = va > vb ? a : b;
+    out.xp = w.xp || 0;
+    out.adjV = w.adjV;
+    out.adjApplied = w.adjApplied;
+  } else {
+    out.xp = sa !== sb ? (sa > sb ? a.xp : b.xp) || 0 : Math.max(a.xp || 0, b.xp || 0);
+    out.adjV = a.adjV || b.adjV;
+    out.adjApplied = a.adjApplied ?? b.adjApplied;
+  }
   out.xpSets = uniqSorted([...arr(a.xpSets), ...arr(b.xpSets)]).slice(-30);
   out.hasCompletedOnboarding = !!(a.hasCompletedOnboarding || b.hasCompletedOnboarding);
   out.updatedAt = Math.max(a.updatedAt || 0, b.updatedAt || 0) || undefined;
@@ -86,6 +98,18 @@ export function mergeProfile(a: UserProfile, b: UserProfile): UserProfile {
   out.bonusDays = uniqSorted([...arr(a.bonusDays), ...arr(b.bonusDays)]).slice(-40);
   out.milestones = uniqSorted([...arr(a.milestones), ...arr(b.milestones)].map(Number));
   out.sentCerts = uniqSorted([...arr(a.sentCerts), ...arr(b.sentCerts)]).slice(-60);
+  out.coins = base.coins !== undefined ? base.coins : (other.coins ?? 0);
+  out.refCount = Math.max(a.refCount || 0, b.refCount || 0);
+  out.refXpEarned = Math.max(a.refXpEarned || 0, b.refXpEarned || 0);
+  out.refCoinsEarned = Math.max(a.refCoinsEarned || 0, b.refCoinsEarned || 0);
+  out.inventory = uniqSorted([...arr(a.inventory), ...arr(b.inventory)]) as string[];
+  out.activeFrame = base.activeFrame !== undefined ? base.activeFrame : (other.activeFrame || '');
+  out.activeTitle = base.activeTitle !== undefined ? base.activeTitle : (other.activeTitle || '');
+  out.activeTheme = base.activeTheme !== undefined ? base.activeTheme : (other.activeTheme || '');
+  out.hasCrown = base.hasCrown !== undefined ? !!base.hasCrown : !!other.hasCrown;
+  out.hasGlowingNick = base.hasGlowingNick !== undefined ? !!base.hasGlowingNick : !!other.hasGlowingNick;
+  out.hasVipCheck = base.hasVipCheck !== undefined ? !!base.hasVipCheck : !!other.hasVipCheck;
+  out.doubleXpUntil = Math.max(a.doubleXpUntil || 0, b.doubleXpUntil || 0);
   out.writingDays = uniqSorted([...arr(a.writingDays), ...arr(b.writingDays)]).slice(-12);
 
   const gx: Record<string, string> = { ...(a.gameXp || {}) };
@@ -248,6 +272,12 @@ export function parseRemoteCore(raw: any, initial: { profile: UserProfile; wheel
     sentCerts: arr(rp.sentCerts).map(String),
     writingDays: arr(rp.writingDays).map(String),
     xpSets: arr(rp.xpSets).map(String),
+    inventory: arr(rp.inventory).map(String),
+    coins: Number.isFinite(Number(rp.coins)) ? Number(rp.coins) : initial.profile.coins || 50,
+    refCount: Number(rp.refCount) || 0,
+    refXpEarned: Number(rp.refXpEarned) || 0,
+    refCoinsEarned: Number(rp.refCoinsEarned) || 0,
+    doubleXpUntil: Number(rp.doubleXpUntil) || 0,
     gameXp: rp.gameXp || {},
   };
   const badges = arr(raw.badges) as AchievementBadge[];
