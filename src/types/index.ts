@@ -145,12 +145,13 @@ export interface UserProfile {
   refXpEarned?: number; // referallar orqali ishlangan jami XP
   refCoinsEarned?: number; // referallar orqali ishlangan jami tangalar
   inventory?: string[]; // sotib olingan mahsulotlar identifikatorlari
-  activeFrame?: string; // joriy tanlangan avatar ramkasi (gold | fire | crystal | neon)
-  activeTitle?: string; // joriy profil unvoni ("So'z ustasi", "Kitobxon", h.k.)
+  activeFrame?: string; // joriy tanlangan avatar ramkasi (gold | fire | crystal | neon | diamond | laurel)
+  activeTitle?: string; // joriy profil unvoni ("So'z ustasi", "Kitobxon", "Titan", h.k.)
   activeTheme?: string; // joriy tanlangan tema ('dark' | 'indigo' | 'neon' | 'emerald')
   hasCrown?: boolean; // avatar ustida toj
   hasGlowingNick?: boolean; // reytingda yaltiroq/gradient ism
   hasVipCheck?: boolean; // ko'k tasdiqlangan belgi (galochka)
+  hasLofiMusic?: boolean; // Lo-Fi musiqa pleyeri xarid qilingan / doimiy ochiq
   doubleXpUntil?: number; // 2x XP tugash vaqti (ms)
 }
 
@@ -172,6 +173,8 @@ export interface ShopItem {
   image?: string;
   icon?: string;
   badge?: string;
+  neonColor?: string; // Neon kartochka va ramkaning RGB/HEX rangi
+  sortOrder?: number; // Ilovada do'konda ko'rinish tartibi
 }
 
 export interface TopBook {

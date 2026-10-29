@@ -961,6 +961,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } else if (g.type === 'coins' && amount > 0) {
           setProfile(p => ({ ...p, coins: (p.coins ?? 50) + amount }));
           pushNotice(`🪙 Admin sizga +${amount} ta tanga sovg'a qildi`);
+        } else if (g.type === 'item' && (g as any).itemId) {
+          const itemId = (g as any).itemId;
+          const itemName = (g as any).itemName || itemId;
+          setProfile(p => {
+            const inv = Array.from(new Set([...(p.inventory || []), itemId]));
+            const updates: Partial<UserProfile> = { inventory: inv };
+            if (itemId === 'lofi_music' || itemId === 'lofi_music_pass') updates.hasLofiMusic = true;
+            if (itemId === 'leaderboard_crown') updates.hasCrown = true;
+            if (itemId === 'gradient_nick') updates.hasGlowingNick = true;
+            if (itemId === 'vip_badge') updates.hasVipCheck = true;
+            if (itemId === 'frame_diamond') updates.activeFrame = 'diamond';
+            else if (itemId === 'frame_laurel') updates.activeFrame = 'laurel';
+            else if (itemId.startsWith('frame_')) updates.activeFrame = itemId.replace('frame_', '');
+            if (itemId.startsWith('theme_')) updates.activeTheme = itemId.replace('theme_', '');
+            if (itemId.startsWith('custom_title_')) updates.activeTitle = itemName.replace('Maxsus unvon: ', '').replace(/«|»/g, '');
+            return { ...p, ...updates, updatedAt: nowMs() };
+          });
+          if (itemId === 'streak_saver') setWheel(w => ({ ...w, streakSavers: w.streakSavers + 1 }));
+          if (itemId === 'streak_saver_3') setWheel(w => ({ ...w, streakSavers: w.streakSavers + 3 }));
+          if (itemId === 'wheel_spins_3') setWheel(w => ({ ...w, bonusSpins: w.bonusSpins + 3 }));
+          pushNotice(`🎁 Admin sizga maxsus sovg'a taqdim etdi: ${itemName}`);
         }
         // Eski «xpset» sovg'alari endi qo'llanmaydi: admin XP o'zgartirishi Liga yozuvidagi `adj` orqali (farq sifatida) ishlaydi.
       });
@@ -1166,6 +1187,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else if (item.id === 'streak_saver') {
       setWheel(w => ({ ...w, streakSavers: w.streakSavers + 1 }));
       pushNotice('🛡️ Streak himoyasi balansingizga qo‘shildi!');
+    } else if (item.id === 'streak_saver_3') {
+      setWheel(w => ({ ...w, streakSavers: w.streakSavers + 3 }));
+      pushNotice('❄️ 3 kunlik Super Streak muzlatish qo‘shildi!');
+    } else if (item.id === 'coins_booster_24h') {
+      pushNotice('🪙 2x Tangalar (24 soat) faollashdi!');
     } else if (item.id === 'frame_golden') {
       profileUpdates.activeFrame = 'golden';
       pushNotice('🖼️ Oltin profil ramkasi o‘rnatildi!');
@@ -1175,6 +1201,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else if (item.id === 'frame_crystal') {
       profileUpdates.activeFrame = 'crystal';
       pushNotice('💎 Kristall profil ramkasi o‘rnatildi!');
+    } else if (item.id === 'frame_diamond') {
+      profileUpdates.activeFrame = 'diamond';
+      pushNotice('💠 Brilliant olmos profil ramkasi o‘rnatildi!');
+    } else if (item.id === 'frame_laurel') {
+      profileUpdates.activeFrame = 'laurel';
+      pushNotice('🌿 Oltin lavr gultoji ramkasi o‘rnatildi!');
     } else if (item.id === 'leaderboard_crown') {
       profileUpdates.hasCrown = true;
       pushNotice('👑 Profilingiz ustiga toj belgisi o‘rnatildi!');
@@ -1232,8 +1264,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       pushNotice(`⭐ ${starsAmount} Telegram Stars so‘rovingiz adminga yuborildi!`);
     } else if (item.id === 'top_books') {
       pushNotice('📘 Inglizcha TOP kitoblar to‘plami ochildi!');
-    } else if (item.id === 'lofi_music') {
-      pushNotice('🎧 Lo-Fi musiqa pleyeri ochildi!');
+    } else if (item.id === 'lofi_music' || item.id === 'lofi_music_pass') {
+      profileUpdates.hasLofiMusic = true;
+      pushNotice('🎧 Lo-Fi musiqa pleyeri ochildi va profilingizga biriktirildi!');
     } else if (item.id === 'premium_words_pack') {
       pushNotice('📚 Premium so‘zlar to‘plami ochildi!');
     }

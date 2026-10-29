@@ -21,8 +21,13 @@ import {
   Copy,
   Check,
   Sparkles,
-  Coins
+  Coins,
+  Music,
+  Play,
+  Pause,
+  SkipForward
 } from 'lucide-react';
+import { lofiPlayer } from '../services/lofiPlayer';
 import { useApp } from '../context/AppContext';
 import { EnglishLevel } from '../types';
 import { triggerHaptic, getTelegramUserData } from '../services/telegram';
@@ -44,10 +49,23 @@ export const LeaderboardTab: React.FC = () => {
   const [lbMode, setLbMode] = useState<'xp' | 'referral'>('xp');
   const [refCopied, setRefCopied] = useState(false);
 
-  const botUsername = (window as any).Telegram?.WebApp?.initDataUnsafe?.bot_username || 'VocaBoost_bot';
+  const botUsername = (window as any).Telegram?.WebApp?.initDataUnsafe?.bot_username || 'VocaBoostProBot';
   const refLink = `https://t.me/${botUsername}?start=ref_${accountId}`;
 
-  const { pendingDuelCode } = useApp();
+  const { pendingDuelCode, lofiTracks, setActiveTab } = useApp();
+  const hasLofi = !!profile.hasLofiMusic || (profile.inventory || []).includes('lofi_music') || (profile.inventory || []).includes('lofi_music_pass');
+  const [isPlayingLofi, setIsPlayingLofi] = useState(() => lofiPlayer.isPlaying());
+  const [currentTrackIndex, setCurrentTrackIndex] = useState(() => lofiPlayer.getCurrentIndex());
+
+  useEffect(() => {
+    if (lofiTracks && lofiTracks.length) lofiPlayer.setTracks(lofiTracks);
+    const unsub = lofiPlayer.subscribe(() => {
+      setIsPlayingLofi(lofiPlayer.isPlaying());
+      setCurrentTrackIndex(lofiPlayer.getCurrentIndex());
+    });
+    return unsub;
+  }, [lofiTracks]);
+  const currentLofiTrack = lofiTracks?.[currentTrackIndex] || lofiTracks?.[0];
   const [activeSubTab, setActiveSubTab] = useState<'league' | 'duel' | 'challenge' | 'profile' | 'hall'>(() => {
     let want = '';
     try {
@@ -390,7 +408,7 @@ export const LeaderboardTab: React.FC = () => {
                       {rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank}
                     </span>
                     {rank <= 3 ? (
-                      <GlowAvatar rank={rank as 1 | 2 | 3} src={user.avatar} name={user.name} size={36} />
+                      <GlowAvatar rank={rank as 1 | 2 | 3} src={user.avatar} name={user.name} size={36} frame={user.frame} crown={user.crown} />
                     ) : (
                       <Avatar
                         src={user.avatar}
@@ -516,6 +534,72 @@ export const LeaderboardTab: React.FC = () => {
                 <div className="text-[9px] text-slate-400 mt-0.5">So&apos;z</div>
               </div>
             </div>
+
+            {/* Doimiy Lo-Fi Music for Studying Pleyeri (Faqat xarid qilganlarga ochiq) */}
+            {hasLofi ? (
+              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-indigo-950/70 via-slate-900 to-indigo-950/70 border border-indigo-500/40 shadow-lg text-left mt-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isPlayingLofi ? 'bg-indigo-500 text-slate-950 shadow-lg shadow-indigo-500/40 animate-pulse' : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'}`}>
+                      <Music className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-black text-white flex items-center gap-1.5">
+                        <span>Lo-Fi Study Player</span>
+                        <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-500/30 text-indigo-300 border border-indigo-400/40 font-bold">Faol</span>
+                      </div>
+                      <div className="text-[11px] text-slate-300 font-medium truncate mt-0.5">
+                        {currentLofiTrack?.title || 'Fokus & Diqqat musiqasi'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                    <button
+                      type="button"
+                      onClick={() => lofiPlayer.toggle()}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition-all active:scale-95 ${
+                        isPlayingLofi ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
+                      }`}
+                    >
+                      {isPlayingLofi ? <Pause className="w-3.5 h-3.5 fill-slate-950" /> : <Play className="w-3.5 h-3.5 fill-slate-200" />}
+                      <span>{isPlayingLofi ? 'Pauza' : 'Ijro'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => lofiPlayer.next()}
+                      className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center active:scale-95 transition-all"
+                      title="Keyingi trek"
+                    >
+                      <SkipForward className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => setActiveTab('shop')}
+                className="p-3 rounded-2xl bg-[#0E1524] border border-dashed border-indigo-500/30 flex items-center justify-between cursor-pointer hover:border-indigo-500/60 transition-all mt-3 text-left"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-slate-800/80 text-slate-400 flex items-center justify-center shrink-0">
+                    <Music className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-300 flex items-center gap-1">
+                      <span>Lo-Fi Music for Studying</span>
+                      <span className="text-[9px] text-amber-400">🔒 Qulflangan</span>
+                    </div>
+                    <div className="text-[10px] text-slate-500">Do‘kondan xarid qiling va profilingizda doimiy tinglang</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="px-2.5 py-1 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px] font-bold hover:bg-indigo-500 hover:text-slate-950 transition-all"
+                >
+                  Ochish →
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Do'stlarni taklif qilish (Referral tizimi) */}

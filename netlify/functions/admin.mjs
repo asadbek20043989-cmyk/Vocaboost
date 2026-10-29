@@ -532,11 +532,12 @@ export const handler = async event => {
 
       // ---------- Sovg'alar va Tangalar ----------
       case 'grant': {
-        const { userId, type, amount, note, toAllReferrers } = body;
-        if (!['spins', 'vip', 'xp', 'coins'].includes(type)) return json(400, { error: 'Tur xato' });
-        const n = Math.round(Number(amount));
+        const { userId, type, amount, note, toAllReferrers, itemId, itemName } = body;
+        if (!['spins', 'vip', 'xp', 'coins', 'item'].includes(type)) return json(400, { error: 'Tur xato' });
+        if (type === 'item' && !itemId) return json(400, { error: 'Mahsulot tanlanmagan' });
+        const n = type === 'item' ? 1 : Math.round(Number(amount));
         const maxAmount = type === 'coins' ? 500000 : type === 'xp' ? 50000 : type === 'vip' ? 720 : 100;
-        if (!(n > 0) || n > maxAmount) return json(400, { error: 'Miqdor noto\'g\'ri' });
+        if (type !== 'item' && (!(n > 0) || n > maxAmount)) return json(400, { error: 'Miqdor noto\'g\'ri' });
         const validHours = type === 'spins' ? Math.max(0, Math.min(24 * 60, Math.round(Number(body.validHours ?? 24) || 0))) : 0;
 
         // Agar "Barcha targ'ibotchilarga" (do'stini taklif qilganlarga) yuborish tanlangan bo'lsa
@@ -546,7 +547,15 @@ export const handler = async event => {
           let grantedCount = 0;
           for (const [uid, u] of referrers) {
             const gid = newGid();
-            await call('PUT', `grants/${uid}/${gid}`, { type, amount: n, validHours, note: String(note || "Targ'ibotchi uchun maxsus sovg'a").slice(0, 80), ts: Date.now() });
+            await call('PUT', `grants/${uid}/${gid}`, {
+              type,
+              amount: n,
+              itemId: itemId || undefined,
+              itemName: itemName || undefined,
+              validHours,
+              note: String(note || "Targ'ibotchi uchun maxsus sovg'a").slice(0, 80),
+              ts: Date.now()
+            });
             if (type === 'coins') {
               await call('PATCH', `leaderboard/${uid}`, { coins: (Number(u.coins) || 0) + n });
             }
@@ -554,8 +563,8 @@ export const handler = async event => {
             grantedCount++;
             if (process.env.BOT_TOKEN && /^tg_\d+$/.test(uid)) {
               try {
-                const label = type === 'coins' ? `${n} tanga` : type === 'xp' ? `${n} XP` : type === 'spins' ? `${n} ta baraban aylantirish` : `${n} soat VIP`;
-                await sendMessage(process.env.BOT_TOKEN, Number(uid.slice(3)), `🎁 <b>Admin sovg‘asi!</b>\n\nDo‘stlarni taklif qilganingiz uchun sizga <b>+${label}</b> taqdim etildi!\n${note ? `\n<i>${note}</i>` : ''}`, openAppMarkup());
+                const label = type === 'item' ? `🎁 Mahsulot: ${itemName || itemId}` : type === 'coins' ? `${n} tanga` : type === 'xp' ? `${n} XP` : type === 'spins' ? `${n} ta baraban aylantirish` : `${n} soat VIP`;
+                await sendMessage(process.env.BOT_TOKEN, Number(uid.slice(3)), `🎁 <b>Admin sovg‘asi!</b>\n\nDo‘stlarni taklif qilganingiz uchun sizga <b>${label}</b> taqdim etildi!\n${note ? `\n<i>${note}</i>` : ''}`, openAppMarkup());
               } catch {}
             }
           }
@@ -564,7 +573,15 @@ export const handler = async event => {
 
         if (!ID_RE.test(userId || '')) return json(400, { error: 'Foydalanuvchi ID xato' });
         const gid = newGid();
-        await call('PUT', `grants/${userId}/${gid}`, { type, amount: n, validHours, note: String(note || '').slice(0, 80), ts: Date.now() });
+        await call('PUT', `grants/${userId}/${gid}`, {
+          type,
+          amount: n,
+          itemId: itemId || undefined,
+          itemName: itemName || undefined,
+          validHours,
+          note: String(note || '').slice(0, 80),
+          ts: Date.now()
+        });
         if (type === 'coins') {
           const curU = (await call('GET', `leaderboard/${userId}`)) || {};
           await call('PATCH', `leaderboard/${userId}`, { coins: (Number(curU.coins) || 0) + n });
@@ -573,8 +590,8 @@ export const handler = async event => {
 
         if (process.env.BOT_TOKEN && /^tg_\d+$/.test(userId)) {
           try {
-            const label = type === 'coins' ? `${n} tanga` : type === 'xp' ? `${n} XP` : type === 'spins' ? `${n} ta baraban aylantirish` : `${n} soat VIP`;
-            await sendMessage(process.env.BOT_TOKEN, Number(userId.slice(3)), `🎁 <b>Admin sovg‘asi!</b>\n\nSizga <b>+${label}</b> taqdim etildi!\n${note ? `\n<i>${note}</i>` : ''}`, openAppMarkup());
+            const label = type === 'item' ? `🎁 Do'kon mahsuloti: ${itemName || itemId}` : type === 'coins' ? `+${n} tanga` : type === 'xp' ? `+${n} XP` : type === 'spins' ? `+${n} ta baraban aylantirish` : `+${n} soat VIP`;
+            await sendMessage(process.env.BOT_TOKEN, Number(userId.slice(3)), `🎁 <b>Admin sovg‘asi!</b>\n\nSizga <b>${label}</b> taqdim etildi!\n${note ? `\n<i>${note}</i>` : ''}`, openAppMarkup());
           } catch {}
         }
         return json(200, { ok: true });

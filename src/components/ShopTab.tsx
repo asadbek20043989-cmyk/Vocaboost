@@ -73,11 +73,15 @@ export const ShopTab: React.FC = () => {
     { id: 'special', label: 'Maxsus', icon: '🎁' },
   ];
 
-  const filteredItems = shopItems.filter(item => {
-    if (item.isActive === false) return false;
-    if (activeCategory === 'all') return true;
-    return item.category === activeCategory;
-  });
+  const hasLofi = !!profile.hasLofiMusic || (profile.inventory || []).includes('lofi_music') || (profile.inventory || []).includes('lofi_music_pass');
+
+  const filteredItems = shopItems
+    .filter(item => {
+      if (item.isActive === false) return false;
+      if (activeCategory === 'all') return true;
+      return item.category === activeCategory;
+    })
+    .sort((a, b) => (a.sortOrder || 999) - (b.sortOrder || 999));
 
   const inventory = profile.inventory || [];
 
@@ -117,6 +121,10 @@ export const ShopTab: React.FC = () => {
       updateProfile({ activeFrame: profile.activeFrame === 'fire' ? '' : 'fire' });
     } else if (item.id === 'frame_crystal') {
       updateProfile({ activeFrame: profile.activeFrame === 'crystal' ? '' : 'crystal' });
+    } else if (item.id === 'frame_diamond') {
+      updateProfile({ activeFrame: profile.activeFrame === 'diamond' ? '' : 'diamond' });
+    } else if (item.id === 'frame_laurel') {
+      updateProfile({ activeFrame: profile.activeFrame === 'laurel' ? '' : 'laurel' });
     } else if (item.id.startsWith('custom_title_')) {
       const titleName = item.title.replace('Maxsus unvon: ', '').replace(/«|»/g, '');
       updateProfile({ activeTitle: profile.activeTitle === titleName ? '' : titleName });
@@ -131,7 +139,7 @@ export const ShopTab: React.FC = () => {
       updateProfile({ activeTheme: profile.activeTheme === th ? '' : th });
     } else if (item.id === 'top_books') {
       setSelectedBook(books[0] || null);
-    } else if (item.id === 'lofi_music') {
+    } else if (item.id === 'lofi_music' || item.id === 'lofi_music_pass') {
       lofiPlayer.toggle();
     }
   };
@@ -213,43 +221,73 @@ export const ShopTab: React.FC = () => {
         )}
       </div>
 
-      {/* Lo-Fi Music Widget: istalgan joyda to'xtatish yoki almashtirish */}
-      <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#172033] to-[#121927] border border-indigo-500/30 flex items-center justify-between shadow-md">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-indigo-300 ${isPlayingLofi ? 'bg-indigo-500 text-slate-950 shadow-md shadow-indigo-500/30' : 'bg-indigo-500/20 border border-indigo-500/40'}`}>
-            <Music className="w-4 h-4" />
+      {/* Lo-Fi Music Widget: faqat xarid qilganlar uchun to'liq faol, bo'lmasa qulflangan holat */}
+      {hasLofi ? (
+        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-indigo-950/70 via-slate-900 to-indigo-950/70 border border-indigo-500/40 flex items-center justify-between shadow-lg">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-indigo-300 ${isPlayingLofi ? 'bg-indigo-500 text-slate-950 shadow-md shadow-indigo-500/40 animate-pulse' : 'bg-indigo-500/20 border border-indigo-500/40'}`}>
+              <Music className="w-4 h-4" />
+            </div>
+            <div className="min-w-0 pr-2">
+              <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>Lo-Fi Study Player</span>
+                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-bold">Ochiq</span>
+                {isPlayingLofi && <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />}
+              </div>
+              <div className="text-[10px] text-slate-300 truncate">
+                {currentTrack?.title || 'Fokus uchun tinch musiqa'}
+              </div>
+            </div>
           </div>
-          <div className="min-w-0 pr-2">
-            <div className="text-xs font-bold text-white flex items-center gap-1.5">
-              <span>Lo-Fi Study Player</span>
-              {isPlayingLofi && <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />}
-            </div>
-            <div className="text-[10px] text-slate-400 truncate">
-              {currentTrack?.title || 'Fokus uchun tinch musiqa'}
-            </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => lofiPlayer.toggle()}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition-all active:scale-95 ${
+                isPlayingLofi ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
+              }`}
+            >
+              {isPlayingLofi ? <Pause className="w-3.5 h-3.5 fill-slate-950" /> : <Play className="w-3.5 h-3.5 fill-slate-200" />}
+              <span>{isPlayingLofi ? 'Pauza' : 'Ijro'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => lofiPlayer.next()}
+              className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center active:scale-95 transition-all"
+              title="Keyingi musiqa"
+            >
+              <SkipForward className="w-4 h-4" />
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
+      ) : (
+        <div className="p-3.5 rounded-2xl bg-[#131B2A] border border-dashed border-indigo-500/40 flex items-center justify-between shadow-md">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 flex items-center justify-center shrink-0">
+              <Music className="w-4 h-4" />
+            </div>
+            <div className="min-w-0 pr-2">
+              <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>Lo-Fi Music for Studying</span>
+                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30 font-bold">🔒 Qulflangan</span>
+              </div>
+              <div className="text-[10px] text-slate-400 truncate">
+                Dars paytida charchoqsiz diqqatni jamlovchi audio pleyer
+              </div>
+            </div>
+          </div>
           <button
             type="button"
-            onClick={() => lofiPlayer.toggle()}
-            className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition-all ${
-              isPlayingLofi ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
-            }`}
+            onClick={() => {
+              const lofiItem = shopItems.find(x => x.id === 'lofi_music');
+              if (lofiItem) handlePurchase(lofiItem);
+            }}
+            className="px-3 py-1.5 rounded-xl bg-indigo-500 text-slate-950 font-black text-xs hover:bg-indigo-400 active:scale-95 transition-all shrink-0 shadow-md shadow-indigo-500/20"
           >
-            {isPlayingLofi ? <Pause className="w-3.5 h-3.5 fill-slate-950" /> : <Play className="w-3.5 h-3.5 fill-slate-200" />}
-            <span>{isPlayingLofi ? 'Pauza' : 'Ijro'}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => lofiPlayer.next()}
-            className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center active:scale-95 transition-all"
-            title="Keyingi musiqa"
-          >
-            <SkipForward className="w-4 h-4" />
+            Xarid qilish 🎧
           </button>
         </div>
-      </div>
+      )}
 
       {/* Kategoriyalar filtri */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
@@ -282,6 +320,9 @@ export const ShopTab: React.FC = () => {
             if (item.id === 'frame_golden' && profile.activeFrame === 'golden') return true;
             if (item.id === 'frame_fire' && profile.activeFrame === 'fire') return true;
             if (item.id === 'frame_crystal' && profile.activeFrame === 'crystal') return true;
+            if (item.id === 'frame_diamond' && profile.activeFrame === 'diamond') return true;
+            if (item.id === 'frame_laurel' && profile.activeFrame === 'laurel') return true;
+            if ((item.id === 'lofi_music' || item.id === 'lofi_music_pass') && hasLofi) return true;
             if (item.id === 'leaderboard_crown' && profile.hasCrown) return true;
             if (item.id === 'gradient_nick' && profile.hasGlowingNick) return true;
             if (item.id === 'vip_badge' && profile.hasVipCheck) return true;
@@ -306,11 +347,21 @@ export const ShopTab: React.FC = () => {
               }`}
             >
               {/* Neon aura effekti */}
-              <div className="absolute -top-10 -right-10 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
+              <div
+                className="absolute -top-10 -right-10 w-28 h-28 rounded-full blur-2xl pointer-events-none opacity-25"
+                style={{ backgroundColor: item.neonColor || '#f59e0b' }}
+              />
 
               {/* Badge */}
               {item.badge && (
-                <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-md bg-amber-400/20 border border-amber-400/40 text-[10px] font-black text-amber-300 shadow-sm">
+                <span
+                  className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-md border text-[10px] font-black shadow-sm"
+                  style={{
+                    backgroundColor: item.neonColor ? `${item.neonColor}25` : 'rgba(251,191,36,0.2)',
+                    borderColor: item.neonColor ? `${item.neonColor}66` : 'rgba(251,191,36,0.4)',
+                    color: item.neonColor || '#fcd34d',
+                  }}
+                >
                   {item.badge}
                 </span>
               )}

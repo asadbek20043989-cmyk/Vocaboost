@@ -290,37 +290,6 @@ function ribbon(ctx: CanvasRenderingContext2D, t: Tpl, cx: number, cy: number, c
   return half;
 }
 
-const CERT_BG_MAP: Record<string, string> = {
-  gold: '/cert-bg/gold.jpg',
-  champion: '/cert-bg/gold.jpg',
-  reviewer: '/cert-bg/gold.jpg',
-  marathon: '/cert-bg/marathon.jpg',
-  trust: '/cert-bg/marathon.jpg',
-  growth: '/cert-bg/growth.jpg',
-  active: '/cert-bg/growth.jpg',
-  wisdom: '/cert-bg/wisdom.jpg',
-  expert: '/cert-bg/wisdom.jpg',
-  silver: '/cert-bg/silver.jpg',
-  platinum: '/cert-bg/silver.jpg',
-  consistent: '/cert-bg/consistent.jpg',
-  speed: '/cert-bg/consistent.jpg',
-  thanks: '/cert-bg/thanks.jpg',
-  limitless: '/cert-bg/thanks.jpg',
-  bronze: '/cert-bg/bronze.jpg',
-};
-
-const certBgCache = new Map<string, HTMLImageElement | null>();
-function loadCertBg(url: string): Promise<HTMLImageElement | null> {
-  if (certBgCache.has(url)) return Promise.resolve(certBgCache.get(url) || null);
-  return new Promise(resolve => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => { certBgCache.set(url, img); resolve(img); };
-    img.onerror = () => { certBgCache.set(url, null); resolve(null); };
-    img.src = url;
-  });
-}
-
 let logoPromise: Promise<HTMLImageElement | null> | null = null;
 function loadLogo(): Promise<HTMLImageElement | null> {
   if (!logoPromise) {
@@ -394,18 +363,9 @@ export async function drawCertificate(canvas: HTMLCanvasElement, c: Certificate)
   canvas.height = H;
   ctx.textAlign = 'center';
 
-  // Yangi shablonlar (PDF 9-16 sahifalardan olingan haqiqiy hashamatli dizaynlar)
-  const bgUrl = CERT_BG_MAP[c.tpl] || '/cert-bg/gold.jpg';
-  const bgImg = await loadCertBg(bgUrl);
-  if (bgImg) {
-    ctx.drawImage(bgImg, 0, 0, W, H);
-    // Matnlar mukammal va tiniq o'qilishi uchun markaziy qoramtir tuman
-    ctx.fillStyle = 'rgba(7, 12, 22, 0.45)';
-    ctx.fillRect(0, 0, W, H);
-  } else {
-    background(ctx, t);
-    frame(ctx, t);
-  }
+  // Aniq, tiniq va hashamatli vektorli fon va hoshiya (hech qanday xiralashish yoki aralashishsiz)
+  background(ctx, t);
+  frame(ctx, t);
 
   // VocaBoost yozuvi (+ logotip)
   const brandY = story ? 220 : 176;

@@ -145,7 +145,7 @@
         <div class="scroll">
           <table>
             <thead>
-              <tr><th>Ikonka</th><th>Nomi</th><th>Kategoriya</th><th>Narx (Tanga)</th><th>Narx (XP)</th><th>Chegirma</th><th>Holat</th><th>Amallar</th></tr>
+              <tr><th>Tartib</th><th>Ikonka/Rasm</th><th>Nomi</th><th>Kategoriya</th><th>Narx (Tanga)</th><th>Chegirma</th><th>Neon</th><th>Yorliq</th><th>Holat</th><th>Amallar</th></tr>
             </thead>
             <tbody id="shopTableBody"></tbody>
           </table>
@@ -166,7 +166,11 @@
             </select>
           </div>
           <div><label>Turi (Type)</label><input id="sh_type" placeholder="double_xp_1h / frame / vip / ..." /></div>
-          <div><label>Ikonka / Rasm (Emoji yoki URL)</label><input id="sh_icon" placeholder="⚡ yoki https://..." /></div>
+          <div><label>Tartibi (Ilovada joylashuv o'rni)</label><input id="sh_order" type="number" min="1" value="10" /></div>
+          <div><label>Neon Ramka Aurasining Rangi</label><input id="sh_neonColor" type="color" value="#f59e0b" style="height:38px;padding:2px" /></div>
+          <div><label>Maxsus Yorliq (Badge: HOT, NEW, TOP, VIP...)</label><input id="sh_badgeTag" placeholder="HOT, NEW, TOP..." /></div>
+          <div><label>Ikonka (Emoji yoki URL)</label><input id="sh_icon" placeholder="⚡ yoki https://..." /></div>
+          <div><label>Rasm / Banner URL (Ixtiyoriy)</label><input id="sh_image" placeholder="https://..." /></div>
           <div><label>Narx (Tangalarda)</label><input id="sh_priceCoins" type="number" min="0" value="100" /></div>
           <div><label>Narx (XP da, ixtiyoriy)</label><input id="sh_priceXp" type="number" min="0" placeholder="0" /></div>
           <div><label>Chegirma (%)</label><input id="sh_discount" type="number" min="0" max="90" value="0" /></div>
@@ -628,10 +632,39 @@
         <div class="row" style="margin-top:10px"><button id="saveN">Saqlash</button></div>
       </div>
       <div class="card">
-        <h2>Foydalanuvchiga sovg'a</h2>
-        <label>Foydalanuvchi ID (Liga bo'limidan)</label><input id="gUser" placeholder="tg_123456789" />
-        <div class="row"><div style="flex:1"><label>Tur</label><select id="gType"><option value="coins">🪙 Tangalar (Coins)</option><option value="spins">Baraban aylantirish</option><option value="vip">VIP (soat)</option><option value="xp">XP</option></select></div><div style="flex:1"><label>Miqdor</label><input id="gAmt" type="number" min="1" value="100" /></div><div style="flex:1" id="gValidBox"><label>Amal qilish muddati (aylantirish uchun)</label><select id="gValid"><option value="24">Shu kuni (24 soat)</option><option value="72">3 kun</option><option value="168">7 kun</option><option value="0">Foydalanilguncha</option></select></div></div><p class="small">Sovg'a faqat bir marta, berilgan miqdorcha qo'llanadi (har kuni emas). Aylantirish sovg'asi muddati tugagach qolgan qismi yonib ketadi.</p>
-        <div class="row" style="margin-top:10px"><button id="gSend">Yuborish 🎁</button></div>
+        <h2>🎁 Foydalanuvchiga sovg'a yuborish (Mahsulot / Tangalar / XP)</h2>
+        <label>Foydalanuvchi ID (Liga bo'limidan nusxalang)</label><input id="gUser" placeholder="tg_123456789 yoki u_..." />
+        <div class="row">
+          <div style="flex:1">
+            <label>Sovg'a turi</label>
+            <select id="gType">
+              <option value="item">🛍️ Do'kondagi mahsulot (Sovg'a)</option>
+              <option value="coins">🪙 Tangalar (Coins)</option>
+              <option value="spins">🎡 Baraban aylantirish</option>
+              <option value="vip">👑 VIP maqomi (soat)</option>
+              <option value="xp">💎 XP ballari</option>
+            </select>
+          </div>
+          <div style="flex:1" id="gItemBox">
+            <label>Qaysi mahsulot?</label>
+            <select id="gItemId"></select>
+          </div>
+          <div style="flex:1" id="gAmtBox" style="display:none">
+            <label>Miqdor</label>
+            <input id="gAmt" type="number" min="1" value="100" />
+          </div>
+          <div style="flex:1" id="gValidBox" style="display:none">
+            <label>Amal qilish muddati (aylantirish uchun)</label>
+            <select id="gValid">
+              <option value="24">Shu kuni (24 soat)</option>
+              <option value="72">3 kun</option>
+              <option value="168">7 kun</option>
+              <option value="0">Foydalanilguncha</option>
+            </select>
+          </div>
+        </div>
+        <p class="small">Admin istalgan do'kondagi mahsulotni (Lo-Fi musiqa, ramkalar, mavzular, unvonlar va hk) yoki tanga/XP ni istalgan kishiga sovg'a tariqasida yuborishi mumkin. Foydalanuvchi ilovani ochganda sovg'a darhol hisobiga biriktiriladi va Telegram botidan tabrik xabarnomasi boradi.</p>
+        <div class="row" style="margin-top:10px"><button id="gSend">Sovg'ani yuborish 🎁</button></div>
       </div>
     </section>
   </div>
@@ -1094,7 +1127,12 @@ $('tcSave').onclick = guard(async () => {
   await api('setThanksCert', { title: $('tc_title').value, reason: $('tc_reason').value });
   flash('Minnatdorchilik sertifikati matni saqlandi ✅');
 });
-function gValidUi() { $('gValidBox').style.display = $('gType').value === 'spins' ? '' : 'none'; }
+function gValidUi() {
+  const t = $('gType').value;
+  if ($('gValidBox')) $('gValidBox').style.display = t === 'spins' ? '' : 'none';
+  if ($('gItemBox')) $('gItemBox').style.display = t === 'item' ? '' : 'none';
+  if ($('gAmtBox')) $('gAmtBox').style.display = t === 'item' ? 'none' : '';
+}
 $('gType').onchange = gValidUi; gValidUi();
 
 /* ---------- sertifikat: ko'rib chiqish, QR, avtomatik matn ---------- */
@@ -1403,7 +1441,23 @@ function renderSettings() {
 }
 $('sSave').onclick = guard(async () => { await api('setConfig', { key: 'settings', value: { reviewCap: +$('s_cap').value, xpNewWord: +$('s_new').value, xpCorrect: +$('s_ok').value, xpDailyBonus: +$('s_bonus').value, coinsPerWord: +$('s_coinWord').value, coinsPerGame: +$('s_coinGame').value } }); flash('Saqlandi ✅'); await load(); });
 $('saveN').onclick = guard(async () => { await api('setAnnouncement', { text: $('nText').value, active: $('nActive').checked }); flash('Saqlandi ✅'); await load(); });
-$('gSend').onclick = guard(async () => { await api('grant', { userId: $('gUser').value.trim(), type: $('gType').value, amount: +$('gAmt').value, validHours: +$('gValid').value }); flash('Sovg\'a yuborildi 🎁 (foydalanuvchi ilovani ochganda qo\'llanadi)'); });
+$('gSend').onclick = guard(async () => {
+  const type = $('gType').value;
+  const userId = $('gUser').value.trim();
+  if (!userId) return flash('Foydalanuvchi ID sini kiriting', false);
+  const p = { userId, type, validHours: +$('gValid').value };
+  if (type === 'item') {
+    const sel = $('gItemId');
+    if (!sel || !sel.value) return flash('Sovg\'a qilinadigan mahsulotni tanlang', false);
+    p.itemId = sel.value;
+    p.itemName = sel.options[sel.selectedIndex]?.text || sel.value;
+    p.amount = 1;
+  } else {
+    p.amount = +$('gAmt').value;
+  }
+  await api('grant', p);
+  flash('Sovg\'a yuborildi 🎁 (foydalanuvchi ilovani ochganda qo\'llanadi)');
+});
 
 /* ---------- do'kon va takliflar ---------- */
 let shopItems = [], editingShopItem = null, booksList = [], lofiList = [];
@@ -1413,16 +1467,22 @@ async function renderShop() {
     const res = await api('getShopConfig');
     shopItems = res.items || [];
     if ($('shopItemCount')) $('shopItemCount').textContent = `(${shopItems.length} ta)`;
+    if ($('gItemId') && shopItems.length) {
+      const cur = $('gItemId').value;
+      $('gItemId').innerHTML = shopItems.map(it => `<option value="${esc(it.id)}" ${it.id === cur ? 'selected' : ''}>${esc(it.icon || '🛍️')} ${esc(it.title || it.name)} (${it.priceCoins || 0} tanga)</option>`).join('');
+    }
     const tbody = $('shopTableBody');
     if (tbody) {
       tbody.innerHTML = shopItems.map(item => `
         <tr>
+          <td style="text-align:center"><b>${item.sortOrder || '—'}</b></td>
           <td style="font-size:20px;text-align:center">${item.icon?.startsWith('http') ? `<img src="${esc(item.icon)}" style="width:28px;height:28px;object-fit:cover;border-radius:6px">` : esc(item.icon || '🛍️')}</td>
           <td><b>${esc(item.title || item.name)}</b><br><span class="small">${esc(item.description || item.desc || '')}</span></td>
           <td><span class="tag">${esc(item.category)}</span></td>
           <td><b style="color:#fbbf24">${(item.priceCoins || 0).toLocaleString()}</b> tanga</td>
-          <td>${item.priceXp ? `<b style="color:#38bdf8">${item.priceXp.toLocaleString()}</b> XP` : '<span class="small">—</span>'}</td>
           <td>${(item.discountPct || item.discount) ? `<span class="tag d">-${item.discountPct || item.discount}%</span>` : '<span class="small">0%</span>'}</td>
+          <td><span style="display:inline-block;width:18px;height:18px;border-radius:4px;background:${item.neonColor || '#f59e0b'};vertical-align:middle;box-shadow:0 0 6px ${item.neonColor || '#f59e0b'}"></span></td>
+          <td>${item.badge ? `<span class="tag" style="background:#f59e0b22;color:#fbbf24;border:1px solid #f59e0b44">${esc(item.badge)}</span>` : '<span class="small">—</span>'}</td>
           <td>${(item.isActive !== false && item.active !== false) ? '<span class="tag ok">Faol</span>' : '<span class="tag d">O‘chiq</span>'}</td>
           <td>
             <div class="acts">
@@ -1432,7 +1492,7 @@ async function renderShop() {
             </div>
           </td>
         </tr>
-      `).join('') || '<tr><td colspan="8" class="small">Do‘konda mahsulot yo‘q.</td></tr>';
+      `).join('') || '<tr><td colspan="10" class="small">Do‘konda mahsulot yo‘q.</td></tr>';
 
       tbody.querySelectorAll('button').forEach(b => b.onclick = guard(async () => {
         const act = b.dataset.act, id = b.dataset.id;
@@ -1512,7 +1572,11 @@ function openShopItemEditor(it) {
   $('sh_name').value = it?.title || it?.name || '';
   $('sh_category').value = it?.category || 'booster';
   $('sh_type').value = it?.itemType || it?.type || 'permanent';
+  $('sh_order').value = it?.sortOrder ?? 10;
+  $('sh_neonColor').value = it?.neonColor || '#f59e0b';
+  $('sh_badgeTag').value = it?.badge || '';
   $('sh_icon').value = it?.icon || '🛍️';
+  $('sh_image').value = it?.image || '';
   $('sh_priceCoins').value = it?.priceCoins ?? 100;
   $('sh_priceXp').value = it?.priceXp || '';
   $('sh_discount').value = it?.discountPct ?? (it?.discount || 0);
@@ -1534,7 +1598,10 @@ if ($('shopSaveItemBtn')) $('shopSaveItemBtn').onclick = guard(async () => {
     category: $('sh_category').value,
     itemType: $('sh_type').value.trim() || 'permanent',
     type: $('sh_type').value.trim() || 'permanent',
+    sortOrder: +$('sh_order').value || 10,
+    neonColor: $('sh_neonColor').value.trim() || '#f59e0b',
     icon: $('sh_icon').value.trim() || '🛍️',
+    image: $('sh_image').value.trim() || undefined,
     priceCoins: +$('sh_priceCoins').value || 0,
     priceXp: +$('sh_priceXp').value || undefined,
     discountPct: +$('sh_discount').value || 0,
@@ -1543,7 +1610,7 @@ if ($('shopSaveItemBtn')) $('shopSaveItemBtn').onclick = guard(async () => {
     desc: $('sh_desc').value.trim(),
     isActive: $('sh_active').checked,
     active: $('sh_active').checked,
-    badge: $('sh_badgeHot').checked ? 'HOT' : ($('sh_badgeNew').checked ? 'NEW' : undefined),
+    badge: $('sh_badgeTag').value.trim() || ($('sh_badgeHot').checked ? 'HOT' : ($('sh_badgeNew').checked ? 'NEW' : undefined)),
   };
   if (!item.id || !item.title) return flash('ID va Nom majburiy', false);
   await api('saveShopItem', { item });

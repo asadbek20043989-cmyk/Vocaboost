@@ -15,6 +15,12 @@ export const Avatar: React.FC<{
   const frameClasses = (() => {
     if (!frame) return '';
     const f = frame.toLowerCase();
+    if (f.includes('diam') || f.includes('olmos')) {
+      return 'ring-2 ring-sky-300 ring-offset-2 ring-offset-[#0B0F17] shadow-[0_0_16px_rgba(186,230,253,0.85)]';
+    }
+    if (f.includes('laur') || f.includes('lavr')) {
+      return 'ring-2 ring-emerald-400 ring-offset-2 ring-offset-[#0B0F17] shadow-[0_0_14px_rgba(52,211,153,0.7)]';
+    }
     if (f.includes('gold') || f.includes('oltin')) {
       return 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#0B0F17] shadow-[0_0_12px_rgba(251,191,36,0.55)]';
     }

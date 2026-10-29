@@ -153,10 +153,11 @@ const MainScreen: React.FC = () => {
   ) : null;
 
   const themeClass = profile.activeTheme ? `theme-${profile.activeTheme}` : '';
+  const hasLofi = !!profile.hasLofiMusic || (profile.inventory || []).includes('lofi_music') || (profile.inventory || []).includes('lofi_music_pass');
 
-  if (overlay?.type === 'learn') return <><LearnSession />{certificate}{toast}<GlobalLofiBar /></>;
-  if (overlay?.type === 'game') return <><GameScreen id={overlay.id} />{certificate}{toast}<GlobalLofiBar /></>;
-  if (overlay?.type === 'survival') return <><SurvivalRun id={overlay.id} />{certificate}{toast}<GlobalLofiBar /></>;
+  if (overlay?.type === 'learn') return <><LearnSession />{certificate}{toast}{hasLofi && <GlobalLofiBar />}</>;
+  if (overlay?.type === 'game') return <><GameScreen id={overlay.id} />{certificate}{toast}{hasLofi && <GlobalLofiBar />}</>;
+  if (overlay?.type === 'survival') return <><SurvivalRun id={overlay.id} />{certificate}{toast}{hasLofi && <GlobalLofiBar />}</>;
 
   return (
     <div className={`min-h-screen bg-[#0B0F17] text-slate-100 flex flex-col justify-between selection:bg-amber-500/20 selection:text-amber-300 ${themeClass}`}>
@@ -177,7 +178,7 @@ const MainScreen: React.FC = () => {
         {activeTab === 'games' && <GamesTab />}
         {activeTab === 'leaderboard' && <LeaderboardTab />}
       </div>
-      <GlobalLofiBar />
+      {hasLofi && <GlobalLofiBar />}
       <BottomNav />
       {certificate}
       {toast}
