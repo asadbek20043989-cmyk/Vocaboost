@@ -578,7 +578,7 @@ export const LeaderboardTab: React.FC = () => {
             ) : (
               <div
                 onClick={() => setActiveTab('shop')}
-                className="p-3.5 rounded-2xl bg-gradient-to-r from-indigo-50/90 via-white to-purple-50/90 dark:bg-[#0E1524] border border-dashed border-indigo-300 dark:border-indigo-500/30 flex items-center justify-between cursor-pointer hover:border-indigo-500/60 transition-all mt-3 text-left shadow-sm dark:shadow-none"
+                className="p-3.5 rounded-2xl bg-white dark:bg-[#0E1524] border-2 border-indigo-200 dark:border-indigo-500/30 flex items-center justify-between cursor-pointer hover:border-indigo-400 transition-all mt-3 text-left shadow-sm dark:shadow-none"
               >
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-slate-800/80 text-indigo-600 dark:text-slate-400 flex items-center justify-center shrink-0">
