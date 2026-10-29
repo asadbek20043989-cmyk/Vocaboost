@@ -1147,7 +1147,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     triggerHaptic('success');
-    sfx.play('correct');
+    sfx.win();
 
     const updatedCoins = Math.max(0, currentBalance - price);
     const currentInventory = profile.inventory || [];

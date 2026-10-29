@@ -335,31 +335,82 @@ export function startListening(
   };
 }
 
-/** So'zni talaffuz bilan solishtirish (aniqlik foizi: 0 - 100) */
-export function comparePronunciation(target: string, spoken: string): number {
-  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
-  const t = norm(target);
-  const s = norm(spoken);
-  if (!t || !s) return 0;
-  if (t === s) return 100;
-  if (t.includes(s) || s.includes(t)) {
-    const ratio = Math.min(t.length, s.length) / Math.max(t.length, s.length);
-    return Math.round(ratio * 90);
-  }
-  // Levenshtein masofasi
-  const m = t.length;
-  const n = s.length;
-  const d: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-  for (let i = 0; i <= m; i++) d[i][0] = i;
-  for (let j = 0; j <= n; j++) d[0][j] = j;
+export function levenshteinDistance(s1: string, s2: string): number {
+  const m = s1.length;
+  const n = s2.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
-      const cost = t[i - 1] === s[j - 1] ? 0 : 1;
-      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (s1[i - 1] === s2[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1];
+      } else {
+        dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      }
     }
   }
-  const dist = d[m][n];
-  const maxLen = Math.max(m, n);
-  const sim = Math.max(0, 1 - dist / maxLen);
-  return Math.round(sim * 100);
+  return dp[m][n];
+}
+
+const norm = (w: string) => w.toLowerCase().replace(/[^a-z0-9']/g, '').trim();
+
+/**
+ * Asl so'z/gap va aytilgan matnni Levenshtein va fonetik o'xshashlik bo'yicha aniq foizda baholaydi.
+ */
+export function compareSpeech(original: string, spoken: string): { words: { w: string; ok: boolean }[]; percent: number } {
+  const oWords = original.split(/\s+/).filter(Boolean);
+  const cleanOrig = norm(original);
+  const cleanSpoken = norm(spoken);
+
+  if (!cleanSpoken) {
+    return { words: oWords.map(w => ({ w, ok: false })), percent: 0 };
+  }
+
+  // To'liq aniq moslik
+  if (cleanOrig === cleanSpoken) {
+    return { words: oWords.map(w => ({ w, ok: true })), percent: 100 };
+  }
+
+  // 1 ta so'zdan iborat bo'lsa (aksariyat so'zlar)
+  if (oWords.length === 1) {
+    const dist = levenshteinDistance(cleanOrig, cleanSpoken);
+    const maxLen = Math.max(cleanOrig.length, cleanSpoken.length, 1);
+    let sim = Math.max(0, Math.round((1 - dist / maxLen) * 100));
+
+    // Biri ikkinchisining ichida bo'lsa (masalan "effort" / "afford" yoki "an afford")
+    if (cleanOrig.includes(cleanSpoken) || cleanSpoken.includes(cleanOrig)) {
+      const ratio = Math.min(cleanOrig.length, cleanSpoken.length) / Math.max(cleanOrig.length, cleanSpoken.length);
+      sim = Math.max(sim, Math.round(ratio * 92));
+    }
+
+    const ok = sim >= 65;
+    return { words: [{ w: oWords[0], ok }], percent: sim };
+  }
+
+  // Bir nechta so'zdan iborat ibora/gap bo'lsa
+  const sWords = spoken.split(/\s+/).filter(Boolean);
+  let totalScore = 0;
+  const wordResults = oWords.map(ow => {
+    const target = norm(ow);
+    let bestSim = 0;
+    for (const sw of sWords) {
+      const candidate = norm(sw);
+      const dist = levenshteinDistance(target, candidate);
+      const maxL = Math.max(target.length, candidate.length, 1);
+      const s = Math.max(0, Math.round((1 - dist / maxL) * 100));
+      if (s > bestSim) bestSim = s;
+    }
+    totalScore += bestSim;
+    return { w: ow, ok: bestSim >= 65 };
+  });
+
+  const avgPercent = Math.round(totalScore / oWords.length);
+  return { words: wordResults, percent: avgPercent };
+}
+
+/** So'zni talaffuz bilan solishtirish (aniqlik foizi: 0 - 100) */
+export function comparePronunciation(target: string, spoken: string): number {
+  return compareSpeech(target, spoken).percent;
 }

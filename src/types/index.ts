@@ -89,10 +89,13 @@ export interface AchievementBadge {
   unlockedAt?: string;
 }
 
+export type TabId = 'home' | 'words' | 'shop' | 'games' | 'leaderboard';
+
 export interface Certificate {
   id: string; // VB-000001
   tpl: string; // andoza (bronze | silver | gold | platinum | champion | active | marathon | thanks)
   title: string; // Sarlavha («Yutuq yoki natija» qatori) — admin kiritadi
+  badgeText?: string; // nishon matni (masalan: "1-HAFTA CHEMPIONI")
   reason?: string; // Izoh — admin kiritadi
   verified?: boolean; // serverda ro'yxatdan o'tgan (QR orqali tekshiriladi)
   name: string;
