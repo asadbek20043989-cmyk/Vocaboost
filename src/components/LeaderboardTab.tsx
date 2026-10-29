@@ -578,23 +578,23 @@ export const LeaderboardTab: React.FC = () => {
             ) : (
               <div
                 onClick={() => setActiveTab('shop')}
-                className="p-3 rounded-2xl bg-[#0E1524] border border-dashed border-indigo-500/30 flex items-center justify-between cursor-pointer hover:border-indigo-500/60 transition-all mt-3 text-left"
+                className="p-3.5 rounded-2xl bg-gradient-to-r from-indigo-50/90 via-white to-purple-50/90 dark:bg-[#0E1524] border border-dashed border-indigo-300 dark:border-indigo-500/30 flex items-center justify-between cursor-pointer hover:border-indigo-500/60 transition-all mt-3 text-left shadow-sm dark:shadow-none"
               >
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-slate-800/80 text-slate-400 flex items-center justify-center shrink-0">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-slate-800/80 text-indigo-600 dark:text-slate-400 flex items-center justify-center shrink-0">
                     <Music className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-slate-300 flex items-center gap-1">
+                    <div className="text-xs font-bold text-slate-900 dark:text-slate-300 flex items-center gap-1.5 flex-wrap">
                       <span>Lo-Fi Music for Studying</span>
-                      <span className="text-[9px] text-amber-400">🔒 Qulflangan</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-400/30 font-bold">🔒 Qulflangan</span>
                     </div>
-                    <div className="text-[10px] text-slate-500">Do‘kondan xarid qiling va profilingizda doimiy tinglang</div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Do‘kondan xarid qiling va profilingizda doimiy tinglang</div>
                   </div>
                 </div>
                 <button
                   type="button"
-                  className="px-2.5 py-1 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px] font-bold hover:bg-indigo-500 hover:text-slate-950 transition-all"
+                  className="px-2.5 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white dark:bg-indigo-500/20 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30 text-[10px] font-bold transition-all shadow-sm shrink-0"
                 >
                   Ochish →
                 </button>

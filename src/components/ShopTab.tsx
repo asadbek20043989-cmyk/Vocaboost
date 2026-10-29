@@ -223,18 +223,18 @@ export const ShopTab: React.FC = () => {
 
       {/* Lo-Fi Music Widget: faqat xarid qilganlar uchun to'liq faol, bo'lmasa qulflangan holat */}
       {hasLofi ? (
-        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-indigo-950/70 via-slate-900 to-indigo-950/70 border border-indigo-500/40 flex items-center justify-between shadow-lg">
+        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-indigo-50 via-white to-purple-50 dark:from-indigo-950/70 dark:via-slate-900 dark:to-indigo-950/70 border border-indigo-200 dark:border-indigo-500/40 flex items-center justify-between shadow-sm dark:shadow-lg">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-indigo-300 ${isPlayingLofi ? 'bg-indigo-500 text-slate-950 shadow-md shadow-indigo-500/40 animate-pulse' : 'bg-indigo-500/20 border border-indigo-500/40'}`}>
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${isPlayingLofi ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/40 animate-pulse' : 'bg-indigo-100 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/40'}`}>
               <Music className="w-4 h-4" />
             </div>
             <div className="min-w-0 pr-2">
-              <div className="text-xs font-bold text-white flex items-center gap-1.5">
+              <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                 <span>Lo-Fi Study Player</span>
-                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-bold">Ochiq</span>
-                {isPlayingLofi && <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />}
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-400/30 font-bold">Ochiq</span>
+                {isPlayingLofi && <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />}
               </div>
-              <div className="text-[10px] text-slate-300 truncate">
+              <div className="text-[10px] text-slate-600 dark:text-slate-300 truncate mt-0.5">
                 {currentTrack?.title || 'Fokus uchun tinch musiqa'}
               </div>
             </div>
@@ -244,16 +244,16 @@ export const ShopTab: React.FC = () => {
               type="button"
               onClick={() => lofiPlayer.toggle()}
               className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition-all active:scale-95 ${
-                isPlayingLofi ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
+                isPlayingLofi ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30' : 'bg-indigo-100 text-indigo-900 hover:bg-indigo-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700'
               }`}
             >
-              {isPlayingLofi ? <Pause className="w-3.5 h-3.5 fill-slate-950" /> : <Play className="w-3.5 h-3.5 fill-slate-200" />}
+              {isPlayingLofi ? <Pause className="w-3.5 h-3.5 fill-slate-950" /> : <Play className="w-3.5 h-3.5 fill-slate-900 dark:fill-slate-200" />}
               <span>{isPlayingLofi ? 'Pauza' : 'Ijro'}</span>
             </button>
             <button
               type="button"
               onClick={() => lofiPlayer.next()}
-              className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center active:scale-95 transition-all"
+              className="w-8 h-8 rounded-xl bg-indigo-100 hover:bg-indigo-200 text-indigo-900 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 flex items-center justify-center active:scale-95 transition-all"
               title="Keyingi musiqa"
             >
               <SkipForward className="w-4 h-4" />
@@ -261,31 +261,38 @@ export const ShopTab: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="p-3.5 rounded-2xl bg-[#131B2A] border border-dashed border-indigo-500/40 flex items-center justify-between shadow-md">
+        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-indigo-50/90 via-white to-purple-50/90 dark:bg-[#131B2A] border border-dashed border-indigo-300 dark:border-indigo-500/40 flex items-center justify-between shadow-sm dark:shadow-md transition-all">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 flex items-center justify-center shrink-0">
-              <Music className="w-4 h-4" />
+            <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-500/15 border border-indigo-200 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-300 flex items-center justify-center shrink-0 shadow-sm">
+              <Music className="w-4.5 h-4.5" />
             </div>
             <div className="min-w-0 pr-2">
-              <div className="text-xs font-bold text-white flex items-center gap-1.5">
+              <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
                 <span>Lo-Fi Music for Studying</span>
-                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30 font-bold">🔒 Qulflangan</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-400/30 font-bold">🔒 Qulflangan</span>
               </div>
-              <div className="text-[10px] text-slate-400 truncate">
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
                 Dars paytida charchoqsiz diqqatni jamlovchi audio pleyer
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              const lofiItem = shopItems.find(x => x.id === 'lofi_music');
-              if (lofiItem) handlePurchase(lofiItem);
-            }}
-            className="px-3 py-1.5 rounded-xl bg-indigo-500 text-slate-950 font-black text-xs hover:bg-indigo-400 active:scale-95 transition-all shrink-0 shadow-md shadow-indigo-500/20"
-          >
-            Xarid qilish 🎧
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-300 font-extrabold text-xs tabular-nums shadow-sm">
+              <Coins className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              <span>{shopItems.find(x => x.id === 'lofi_music')?.priceCoins ?? 120}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const lofiItem = shopItems.find(x => x.id === 'lofi_music');
+                if (lofiItem) handlePurchase(lofiItem);
+              }}
+              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs active:scale-95 transition-all shadow-md shadow-indigo-600/25 flex items-center gap-1"
+            >
+              <span>Xarid qilish</span>
+              <span>🎧</span>
+            </button>
+          </div>
         </div>
       )}
 
