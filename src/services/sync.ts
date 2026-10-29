@@ -98,17 +98,17 @@ export function mergeProfile(a: UserProfile, b: UserProfile): UserProfile {
   out.bonusDays = uniqSorted([...arr(a.bonusDays), ...arr(b.bonusDays)]).slice(-40);
   out.milestones = uniqSorted([...arr(a.milestones), ...arr(b.milestones)].map(Number));
   out.sentCerts = uniqSorted([...arr(a.sentCerts), ...arr(b.sentCerts)]).slice(-60);
-  out.coins = Math.max(a.coins || 0, b.coins || 0);
+  out.coins = base.coins !== undefined ? base.coins : (other.coins ?? 0);
   out.refCount = Math.max(a.refCount || 0, b.refCount || 0);
   out.refXpEarned = Math.max(a.refXpEarned || 0, b.refXpEarned || 0);
   out.refCoinsEarned = Math.max(a.refCoinsEarned || 0, b.refCoinsEarned || 0);
   out.inventory = uniqSorted([...arr(a.inventory), ...arr(b.inventory)]) as string[];
-  out.activeFrame = base.activeFrame || other.activeFrame || '';
-  out.activeTitle = base.activeTitle || other.activeTitle || '';
-  out.activeTheme = base.activeTheme || other.activeTheme || '';
-  out.hasCrown = !!(a.hasCrown || b.hasCrown);
-  out.hasGlowingNick = !!(a.hasGlowingNick || b.hasGlowingNick);
-  out.hasVipCheck = !!(a.hasVipCheck || b.hasVipCheck);
+  out.activeFrame = base.activeFrame !== undefined ? base.activeFrame : (other.activeFrame || '');
+  out.activeTitle = base.activeTitle !== undefined ? base.activeTitle : (other.activeTitle || '');
+  out.activeTheme = base.activeTheme !== undefined ? base.activeTheme : (other.activeTheme || '');
+  out.hasCrown = base.hasCrown !== undefined ? !!base.hasCrown : !!other.hasCrown;
+  out.hasGlowingNick = base.hasGlowingNick !== undefined ? !!base.hasGlowingNick : !!other.hasGlowingNick;
+  out.hasVipCheck = base.hasVipCheck !== undefined ? !!base.hasVipCheck : !!other.hasVipCheck;
   out.doubleXpUntil = Math.max(a.doubleXpUntil || 0, b.doubleXpUntil || 0);
   out.writingDays = uniqSorted([...arr(a.writingDays), ...arr(b.writingDays)]).slice(-12);
 

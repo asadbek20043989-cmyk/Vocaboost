@@ -49,6 +49,8 @@ export interface Settings {
   xpNewWord: number;
   xpCorrect: number;
   xpDailyBonus: number;
+  coinsPerWord: number;
+  coinsPerGame: number;
 }
 /** Daraja bo'yicha so'zlar ustuvorligi: o'z darajasi birinchi, tugasa — eng yaqin darajalar */
 const LEVEL_PREF: Record<EnglishLevel, EnglishLevel[]> = {
@@ -59,7 +61,7 @@ const LEVEL_PREF: Record<EnglishLevel, EnglishLevel[]> = {
 };
 /** Daraja bo'yicha so'z kam bo'lsa ham o'yin/mashqlar to'xtab qolmasligi uchun eng kam ko'rinadigan so'zlar soni */
 const MIN_LEVEL_WORDS = 40;
-const DEFAULT_SETTINGS: Settings = { reviewCap: 30, xpNewWord: 3, xpCorrect: 2, xpDailyBonus: 10 };
+const DEFAULT_SETTINGS: Settings = { reviewCap: 30, xpNewWord: 3, xpCorrect: 2, xpDailyBonus: 10, coinsPerWord: 2, coinsPerGame: 5 };
 
 export const MILESTONES: { n: number; tpl: string; title: string }[] = [
   { n: 100, tpl: 'bronze', title: "100 ta so'z yodlandi" },
@@ -159,7 +161,7 @@ interface AppContextType {
   books: TopBook[];
   lofiTracks: LofiTrack[];
   referralConfig: ReferralConfig;
-  buyShopItem: (item: ShopItem, currency?: 'coins' | 'xp') => { ok: boolean; message: string; prize?: any };
+  buyShopItem: (item: ShopItem, tgUsername?: string) => { ok: boolean; message: string; prize?: any };
   isDoubleXpActive: boolean;
   doubleXpTimeLeft: string;
   aiLeft: number;
@@ -555,6 +557,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       xpNewWord: n(s.xpNewWord, DEFAULT_SETTINGS.xpNewWord),
       xpCorrect: n(s.xpCorrect, DEFAULT_SETTINGS.xpCorrect),
       xpDailyBonus: n(s.xpDailyBonus, DEFAULT_SETTINGS.xpDailyBonus),
+      coinsPerWord: n(s.coinsPerWord, DEFAULT_SETTINGS.coinsPerWord),
+      coinsPerGame: n(s.coinsPerGame, DEFAULT_SETTINGS.coinsPerGame),
     };
   }, [config]);
 
@@ -1039,12 +1043,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addXp = (amount: number): number => {
     const gained = applyXpMultiplier(amount);
-    // Tanga topish: XP ning 1/2 qismi (PDF 1-sahifa: "XP topilganda: XP ning 1/2 qismi")
-    const coinGain = Math.max(1, Math.floor(gained / 2));
     setProfile(p => ({
       ...p,
       xp: p.xp + gained,
-      coins: (p.coins ?? 50) + coinGain,
       updatedAt: nowMs(),
     }));
     return gained;
@@ -1135,24 +1136,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [isTelegram]);
 
-  // Do'kondan xarid qilish (tangalar yoki XP bilan) — darhol taqdim etiladi
-  const buyShopItem = (item: ShopItem, currency: 'coins' | 'xp' = 'coins'): { ok: boolean; message: string; prize?: any } => {
-    const price = currency === 'xp' ? (item.priceXp || 999999) : item.priceCoins;
-    const currentBalance = currency === 'xp' ? profile.xp : (profile.coins ?? 50);
+  // Do'kondan faqat tangalar bilan xarid qilish — barcha mahsulotlar darhol taqdim etiladi
+  const buyShopItem = (item: ShopItem, tgUsername?: string): { ok: boolean; message: string; prize?: any } => {
+    const price = item.priceCoins;
+    const currentBalance = profile.coins ?? 50;
 
     if (currentBalance < price) {
       triggerHaptic('error');
-      return { ok: false, message: `Mablag‘ yetarli emas! Sizda ${currentBalance} ${currency === 'xp' ? 'XP' : 'tanga'} mavjud, mahsulot narxi: ${price} ${currency === 'xp' ? 'XP' : 'tanga'}.` };
+      return { ok: false, message: `Tangalaringiz yetarli emas! Sizda ${currentBalance} tanga mavjud, mahsulot narxi esa ${price} tanga.` };
     }
 
     triggerHaptic('success');
     sfx.play('correct');
 
-    const updatedCoins = currency === 'coins' ? (profile.coins ?? 50) - price : (profile.coins ?? 50);
-    const updatedXp = currency === 'xp' ? Math.max(0, profile.xp - price) : profile.xp;
+    const updatedCoins = Math.max(0, currentBalance - price);
     const currentInventory = profile.inventory || [];
     let updatedInventory = currentInventory.includes(item.id) ? currentInventory : [...currentInventory, item.id];
-    let profileUpdates: Partial<UserProfile> = { coins: updatedCoins, xp: updatedXp, inventory: updatedInventory };
+    let profileUpdates: Partial<UserProfile> = { coins: updatedCoins, inventory: updatedInventory, updatedAt: nowMs() };
     let prizeResult: any = null;
 
     if (item.id === 'xp_boost_1h') {
@@ -1199,7 +1199,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const rnd = Math.random();
       if (rnd < 0.35) {
         const bonusXp = 100 + Math.floor(Math.random() * 200);
-        profileUpdates.xp = updatedXp + bonusXp;
+        profileUpdates.xp = profile.xp + bonusXp;
         prizeResult = { type: 'xp', amount: bonusXp, text: `+${bonusXp} XP` };
         pushNotice(`🎁 Sirli qutidan: +${bonusXp} XP chiqdi!`);
       } else if (rnd < 0.65) {
@@ -1217,8 +1217,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         prizeResult = { type: 'booster', text: '⚡ 2x XP (1 soat)' };
         pushNotice('🎁 Sirli qutidan: 2x XP (1 soat) chiqdi!');
       }
-    } else if (item.id === 'telegram_premium') {
-      pushNotice('⭐ Telegram Premium / Stars so‘rovingiz yuborildi. Admin siz bilan bog‘lanadi.');
+    } else if (item.id.startsWith('telegram_stars_')) {
+      const starsAmount = item.id === 'telegram_stars_100' ? 100 : 50;
+      const un = (tgUsername || profile.username || '').replace(/^@/, '');
+      put(`inbox/stars_${Date.now()}_${myId.current}`, {
+        type: 'stars_request',
+        userId: myId.current,
+        name: profile.name,
+        username: un,
+        amount: starsAmount,
+        coinsSpent: price,
+        date: new Date().toISOString(),
+      }).catch(() => {});
+      pushNotice(`⭐ ${starsAmount} Telegram Stars so‘rovingiz adminga yuborildi!`);
     } else if (item.id === 'top_books') {
       pushNotice('📘 Inglizcha TOP kitoblar to‘plami ochildi!');
     } else if (item.id === 'lofi_music') {
@@ -1415,6 +1426,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSrs(prev => (prev[b.id] ? prev : { ...prev, [b.id]: { ...newEntry(todayKey(), correct), xpDay: todayKey() } }));
     bumpQuest('learn_words');
     registerActivity();
+    if (correct && (settings.coinsPerWord || 2) > 0) {
+      addCoins(settings.coinsPerWord || 2);
+    }
     return addXp(settings.xpNewWord);
   };
 
@@ -1432,6 +1446,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       triggerHaptic('success');
     }
     registerActivity();
+    if (give && (settings.coinsPerWord || 2) > 0) {
+      addCoins(settings.coinsPerWord || 2);
+    }
     return give ? addXp(settings.xpCorrect) : 0;
   };
 
@@ -1462,7 +1479,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
-  // O'yin tugadi: aniqlik >= 60% bo'lsa XP (har bir o'yin uchun kuniga faqat bir marta)
+  // O'yin tugadi: aniqlik >= 60% bo'lsa XP va Tangalar (har bir o'yin uchun kuniga faqat bir marta)
   const completeGame = (id: string, correct: number, total: number, demo = false) => {
     const t = todayKey();
     const g = games.find(x => x.id === id);
@@ -1471,8 +1488,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const already = profile.gameXp[id] === t;
     if (already) return { xp: 0, passed, already: true };
     const xp = applyXpMultiplier(g.xp);
-    const coins = Math.max(2, Math.floor(xp / 2));
-    setProfile(p => ({ ...p, xp: p.xp + xp, coins: (p.coins ?? 50) + coins, gameXp: { ...p.gameXp, [id]: t } }));
+    const coins = Math.max(1, settings.coinsPerGame || 5);
+    setProfile(p => ({ ...p, xp: p.xp + xp, coins: (p.coins ?? 50) + coins, gameXp: { ...p.gameXp, [id]: t }, updatedAt: nowMs() }));
     setGamesPlayed(n => n + 1);
     bumpQuest('play_game');
     if (correct === total) bumpQuest('perfect_round');

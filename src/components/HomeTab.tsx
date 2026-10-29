@@ -58,50 +58,66 @@ export const HomeTab: React.FC = () => {
 
   return (
     <div className="space-y-5 pb-6">
-      {/* Header */}
-      <header className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <Avatar
-            src={profile.avatar}
-            name={profile.name}
-            frame={profile.activeFrame}
-            crown={profile.hasCrown}
-            className="w-12 h-12 border border-slate-700"
-          />
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <h1 className={`text-base font-bold truncate ${profile.hasGlowingNick ? 'bg-gradient-to-r from-amber-300 via-rose-300 to-amber-200 bg-clip-text text-transparent font-black drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]' : 'text-white'}`}>
-                {profile.name}
-              </h1>
-              {profile.hasVipCheck && (
-                <span className="w-4 h-4 rounded-full bg-sky-500 text-white text-[10px] flex items-center justify-center font-black shrink-0" title="VIP foydalanuvchi">✓</span>
-              )}
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30">{profile.level}</span>
+      {/* Header - Tartibli va chiroyli 2 qatorli joylashuv */}
+      <header className="space-y-3 pt-1">
+        {/* 1-qator: Foydalanuvchi ma'lumotlari to'liq hajmda */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <Avatar
+              src={profile.avatar}
+              name={profile.name}
+              frame={profile.activeFrame}
+              crown={profile.hasCrown}
+              className="w-13 h-13 border-2 border-slate-700/80 shadow-md shrink-0"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h1 className={`text-base sm:text-lg font-black truncate max-w-[170px] sm:max-w-none ${profile.hasGlowingNick ? 'bg-gradient-to-r from-amber-300 via-rose-300 to-amber-200 bg-clip-text text-transparent drop-shadow-[0_0_10px_rgba(251,191,36,0.6)]' : 'text-white'}`}>
+                  {profile.name}
+                </h1>
+                {profile.hasVipCheck && (
+                  <span className="w-4 h-4 rounded-full bg-sky-500 text-white text-[10px] flex items-center justify-center font-black shrink-0 shadow-[0_0_8px_rgba(14,165,233,0.5)]" title="VIP foydalanuvchi">✓</span>
+                )}
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">{profile.level}</span>
+              </div>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                {profile.activeTitle && (
+                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/20 via-purple-500/20 to-sky-500/20 border border-amber-400/40 text-amber-300 shadow-sm">
+                    {profile.activeTitle}
+                  </span>
+                )}
+                <p className="text-[11px] text-slate-400">Kuniga {profile.wordsPerDay} ta yangi so&apos;z</p>
+              </div>
             </div>
-            <div className="flex items-center gap-2 mt-0.5">
-              {profile.activeTitle && (
-                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-gradient-to-r from-amber-500/20 to-purple-500/20 border border-amber-400/40 text-amber-300">
-                  {profile.activeTitle}
-                </span>
-              )}
-              <p className="text-[11px] text-slate-400">Kuniga {profile.wordsPerDay} ta yangi so&apos;z</p>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-bold tabular-nums">
-            <Flame className="w-3.5 h-3.5" /> {profile.streak}
           </div>
           <button
             type="button"
             onClick={() => setActiveTab('shop')}
-            className="flex items-center gap-1 px-2 py-1 rounded-full bg-yellow-500/15 border border-yellow-500/40 text-yellow-300 text-xs font-bold tabular-nums hover:scale-105 transition-transform"
-            title="Tangalar balansi. Do'konga o'tish"
+            className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-500/20 to-yellow-500/10 border border-amber-500/30 text-amber-400 hover:scale-105 active:scale-95 transition-all shadow-md shrink-0"
+            title="Do'konga o'tish"
           >
-            <Coins className="w-3.5 h-3.5 text-yellow-400" /> {profile.coins ?? 50}
+            <ShoppingBag className="w-5 h-5 text-amber-400" />
           </button>
-          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold tabular-nums">
-            <Diamond className="w-3.5 h-3.5" /> {profile.xp} XP
+        </div>
+
+        {/* 2-qator: Streak, Tangalar va XP ko'rsatkichlari sig'adigan 3 ta teng karta */}
+        <div className="grid grid-cols-3 gap-2">
+          <div className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-2xl bg-[#141B28]/90 border border-orange-500/30 text-orange-400 shadow-sm">
+            <Flame className="w-4 h-4 text-orange-400 shrink-0" />
+            <span className="text-xs font-black tabular-nums">{profile.streak} kun</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab('shop')}
+            className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-2xl bg-[#141B28]/90 border border-yellow-500/30 text-yellow-300 hover:border-yellow-400/60 active:scale-95 transition-all shadow-sm"
+            title="Tangalar balansi"
+          >
+            <Coins className="w-4 h-4 text-yellow-400 shrink-0" />
+            <span className="text-xs font-black tabular-nums">{profile.coins ?? 50} tanga</span>
+          </button>
+          <div className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-2xl bg-[#141B28]/90 border border-sky-500/30 text-sky-400 shadow-sm">
+            <Diamond className="w-4 h-4 text-sky-400 shrink-0" />
+            <span className="text-xs font-black tabular-nums">{profile.xp} XP</span>
           </div>
         </div>
       </header>

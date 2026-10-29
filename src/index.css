@@ -236,3 +236,31 @@ html.light { --pd-inner: #FFFFFF; }
 .row-silver { box-shadow: 0 0 0 1px rgba(56,189,248,.5), 0 0 16px rgba(56,189,248,.2); }
 .row-bronze { box-shadow: 0 0 0 1px rgba(249,115,22,.5), 0 0 16px rgba(249,115,22,.2); }
 @media (prefers-reduced-motion: reduce) { .pd-halo, .pd-ring, .pd-crown, .pd-spark, .pd-base::after { animation: none !important; } }
+
+/* =====================================================================
+   INTERFEYS MAVZULARI (Themes: Neon, Indigo, Nature)
+   ===================================================================== */
+.theme-neon {
+  background: radial-gradient(circle at 50% 0%, #15092b 0%, #070914 100%) !important;
+}
+.theme-neon header h1, .theme-neon .vb-neon-glow {
+  text-shadow: 0 0 12px rgba(236, 72, 153, 0.7), 0 0 20px rgba(6, 182, 212, 0.5);
+}
+.theme-neon .border-slate-800 {
+  border-color: rgba(168, 85, 247, 0.25) !important;
+}
+
+.theme-indigo {
+  background: radial-gradient(circle at 50% 0%, #0d122e 0%, #050814 100%) !important;
+}
+.theme-indigo .border-slate-800 {
+  border-color: rgba(99, 102, 241, 0.25) !important;
+}
+
+.theme-nature {
+  background: radial-gradient(circle at 50% 0%, #061f18 0%, #040d0a 100%) !important;
+}
+.theme-nature .border-slate-800 {
+  border-color: rgba(16, 185, 129, 0.25) !important;
+}
+
