@@ -616,6 +616,8 @@
           <div><label>Yangi so'z uchun XP</label><input id="s_new" type="number" min="0" /></div>
           <div><label>To'g'ri takrorlash uchun XP (kuniga 1 marta)</label><input id="s_ok" type="number" min="0" /></div>
           <div><label>Kunlik mashq bonusi (XP)</label><input id="s_bonus" type="number" min="0" /></div>
+          <div><label>Mashqlarda to'g'ri so'z uchun tanga (Coin)</label><input id="s_coinWord" type="number" min="0" /></div>
+          <div><label>O'yinda g'alaba uchun tanga (Coin)</label><input id="s_coinGame" type="number" min="0" /></div>
         </div>
         <div class="row" style="margin-top:10px"><button id="sSave">Saqlash</button></div>
       </div>
@@ -1343,7 +1345,7 @@ function updateAdPreview() {
   const photo = $('ad_photo').value.trim();
   $('ad_pv_img').style.display = photo ? 'block' : 'none';
   if (photo) $('ad_pv_img_el').src = photo;
-  $('ad_pv_text').innerHTML = txt.replace(/\{name\}/g, "Do'st").replace(/\{ref_link\}/g, "https://t.me/VocaBoost_bot?start=ref_12345") || '<span style="color:#64748b">Xabar matni...</span>';
+  $('ad_pv_text').innerHTML = txt.replace(/\{name\}/g, "Do'st").replace(/\{ref_link\}/g, "https://t.me/VocaBoostProBot?start=ref_12345") || '<span style="color:#64748b">Xabar matni...</span>';
 
   const btns = [
     { t: $('ad_b1_t').value.trim(), u: $('ad_b1_u').value.trim() },
@@ -1394,11 +1396,12 @@ $('adSendAll').onclick = guard(async () => {
 /* ---------- sozlamalar ---------- */
 function renderSettings() {
   const s = data.config.settings || {};
-  if (document.activeElement && ['s_cap','s_new','s_ok','s_bonus','nText'].includes(document.activeElement.id)) return;
+  if (document.activeElement && ['s_cap','s_new','s_ok','s_bonus','s_coinWord','s_coinGame','nText'].includes(document.activeElement.id)) return;
   $('s_cap').value = s.reviewCap ?? 30; $('s_new').value = s.xpNewWord ?? 3; $('s_ok').value = s.xpCorrect ?? 2; $('s_bonus').value = s.xpDailyBonus ?? 10;
+  $('s_coinWord').value = s.coinsPerWord ?? 2; $('s_coinGame').value = s.coinsPerGame ?? 5;
   const a = data.config.announcement || {}; $('nText').value = a.text || ''; $('nActive').checked = !!a.active;
 }
-$('sSave').onclick = guard(async () => { await api('setConfig', { key: 'settings', value: { reviewCap: +$('s_cap').value, xpNewWord: +$('s_new').value, xpCorrect: +$('s_ok').value, xpDailyBonus: +$('s_bonus').value } }); flash('Saqlandi ✅'); await load(); });
+$('sSave').onclick = guard(async () => { await api('setConfig', { key: 'settings', value: { reviewCap: +$('s_cap').value, xpNewWord: +$('s_new').value, xpCorrect: +$('s_ok').value, xpDailyBonus: +$('s_bonus').value, coinsPerWord: +$('s_coinWord').value, coinsPerGame: +$('s_coinGame').value } }); flash('Saqlandi ✅'); await load(); });
 $('saveN').onclick = guard(async () => { await api('setAnnouncement', { text: $('nText').value, active: $('nActive').checked }); flash('Saqlandi ✅'); await load(); });
 $('gSend').onclick = guard(async () => { await api('grant', { userId: $('gUser').value.trim(), type: $('gType').value, amount: +$('gAmt').value, validHours: +$('gValid').value }); flash('Sovg\'a yuborildi 🎁 (foydalanuvchi ilovani ochganda qo\'llanadi)'); });
 
@@ -1415,16 +1418,16 @@ async function renderShop() {
       tbody.innerHTML = shopItems.map(item => `
         <tr>
           <td style="font-size:20px;text-align:center">${item.icon?.startsWith('http') ? `<img src="${esc(item.icon)}" style="width:28px;height:28px;object-fit:cover;border-radius:6px">` : esc(item.icon || '🛍️')}</td>
-          <td><b>${esc(item.name)}</b><br><span class="small">${esc(item.desc || '')}</span></td>
+          <td><b>${esc(item.title || item.name)}</b><br><span class="small">${esc(item.description || item.desc || '')}</span></td>
           <td><span class="tag">${esc(item.category)}</span></td>
-          <td><b style="color:#fbbf24">${item.priceCoins.toLocaleString()}</b> tanga</td>
+          <td><b style="color:#fbbf24">${(item.priceCoins || 0).toLocaleString()}</b> tanga</td>
           <td>${item.priceXp ? `<b style="color:#38bdf8">${item.priceXp.toLocaleString()}</b> XP` : '<span class="small">—</span>'}</td>
-          <td>${item.discount ? `<span class="tag d">-${item.discount}%</span>` : '<span class="small">0%</span>'}</td>
-          <td>${item.active !== false ? '<span class="tag ok">Faol</span>' : '<span class="tag d">O‘chiq</span>'}</td>
+          <td>${(item.discountPct || item.discount) ? `<span class="tag d">-${item.discountPct || item.discount}%</span>` : '<span class="small">0%</span>'}</td>
+          <td>${(item.isActive !== false && item.active !== false) ? '<span class="tag ok">Faol</span>' : '<span class="tag d">O‘chiq</span>'}</td>
           <td>
             <div class="acts">
               <button class="sec" data-act="sh-edit" data-id="${esc(item.id)}">Tahrir</button>
-              <button class="sec" data-act="sh-toggle" data-id="${esc(item.id)}">${item.active !== false ? "O'chirish" : "Yoqish"}</button>
+              <button class="sec" data-act="sh-toggle" data-id="${esc(item.id)}">${(item.isActive !== false && item.active !== false) ? "O'chirish" : "Yoqish"}</button>
               <button class="bad" data-act="sh-del" data-id="${esc(item.id)}">×</button>
             </div>
           </td>
@@ -1436,12 +1439,14 @@ async function renderShop() {
         const it = shopItems.find(x => x.id === id);
         if (act === 'sh-edit') openShopItemEditor(it);
         else if (act === 'sh-toggle') {
-          it.active = it.active === false ? true : false;
+          const nextActive = !(it.isActive !== false && it.active !== false);
+          it.active = nextActive;
+          it.isActive = nextActive;
           await api('saveShopItem', { item: it });
           flash('Mahsulot holati yangilandi ✅');
           renderShop();
         } else if (act === 'sh-del') {
-          if (!confirm(`"${it.name}" o'chirilsinmi?`)) return;
+          if (!confirm(`"${it.title || it.name}" o'chirilsinmi?`)) return;
           await api('deleteShopItem', { id });
           flash('O‘chirildi ✅');
           renderShop();
@@ -1501,18 +1506,18 @@ async function renderShop() {
 function openShopItemEditor(it) {
   editingShopItem = it;
   $('shopItemEditor').classList.remove('hide');
-  $('shopEdTitle').textContent = it ? `Tahrirlash: ${it.name}` : 'Yangi mahsulot';
+  $('shopEdTitle').textContent = it ? `Tahrirlash: ${it.title || it.name}` : 'Yangi mahsulot';
   $('sh_id').value = it?.id || 'item_' + Date.now();
   $('sh_id').disabled = !!it;
-  $('sh_name').value = it?.name || '';
+  $('sh_name').value = it?.title || it?.name || '';
   $('sh_category').value = it?.category || 'booster';
-  $('sh_type').value = it?.type || '';
-  $('sh_icon').value = it?.icon || '⚡';
+  $('sh_type').value = it?.itemType || it?.type || 'permanent';
+  $('sh_icon').value = it?.icon || '🛍️';
   $('sh_priceCoins').value = it?.priceCoins ?? 100;
   $('sh_priceXp').value = it?.priceXp || '';
-  $('sh_discount').value = it?.discount || 0;
-  $('sh_desc').value = it?.desc || '';
-  $('sh_active').checked = it ? it.active !== false : true;
+  $('sh_discount').value = it?.discountPct ?? (it?.discount || 0);
+  $('sh_desc').value = it?.description || it?.desc || '';
+  $('sh_active').checked = it ? (it.isActive !== false && it.active !== false) : true;
   $('sh_badgeHot').checked = it?.badge === 'HOT';
   $('sh_badgeNew').checked = it?.badge === 'NEW';
   $('shopItemEditor').scrollIntoView({ behavior: 'smooth' });
@@ -1524,18 +1529,23 @@ if ($('shopCancelItemBtn')) $('shopCancelItemBtn').onclick = () => $('shopItemEd
 if ($('shopSaveItemBtn')) $('shopSaveItemBtn').onclick = guard(async () => {
   const item = {
     id: $('sh_id').value.trim(),
+    title: $('sh_name').value.trim(),
     name: $('sh_name').value.trim(),
     category: $('sh_category').value,
-    type: $('sh_type').value.trim() || 'booster',
+    itemType: $('sh_type').value.trim() || 'permanent',
+    type: $('sh_type').value.trim() || 'permanent',
     icon: $('sh_icon').value.trim() || '🛍️',
     priceCoins: +$('sh_priceCoins').value || 0,
     priceXp: +$('sh_priceXp').value || undefined,
+    discountPct: +$('sh_discount').value || 0,
     discount: +$('sh_discount').value || 0,
+    description: $('sh_desc').value.trim(),
     desc: $('sh_desc').value.trim(),
+    isActive: $('sh_active').checked,
     active: $('sh_active').checked,
     badge: $('sh_badgeHot').checked ? 'HOT' : ($('sh_badgeNew').checked ? 'NEW' : undefined),
   };
-  if (!item.id || !item.name) return flash('ID va Nom majburiy', false);
+  if (!item.id || !item.title) return flash('ID va Nom majburiy', false);
   await api('saveShopItem', { item });
   flash('Mahsulot saqlandi ✅');
   $('shopItemEditor').classList.add('hide');

@@ -606,13 +606,16 @@ export const handler = async event => {
 
       case 'saveShopItem': {
         const item = body.item;
-        if (!item || !item.id || !item.title) return json(400, { error: "Mahsulot ma'lumotlari to'liq emas" });
+        const title = item?.title || item?.name;
+        if (!item || !item.id || !title) return json(400, { error: "Mahsulot ma'lumotlari to'liq emas" });
         await call('PUT', `config/shop/${item.id}`, {
           ...item,
+          title,
+          description: item.description || item.desc || '',
           priceCoins: Math.max(0, Number(item.priceCoins) || 0),
           priceXp: Math.max(0, Number(item.priceXp) || 0),
-          discountPct: Math.min(90, Math.max(0, Number(item.discountPct) || 0)),
-          isActive: item.isActive !== false,
+          discountPct: Math.min(90, Math.max(0, Number(item.discountPct ?? item.discount) || 0)),
+          isActive: item.isActive !== false && item.active !== false,
           updatedAt: Date.now(),
         });
         return json(200, { ok: true });
